@@ -377,27 +377,27 @@ private wakeUpIntervalSetCmd(minutesVal) {
   state.checkinIntervalMinutes = minutesVal
   logTrace "wakeUpIntervalSetCmd(${minutesVal})"
   
-  return zwave.wakeUpV2.wakeUpIntervalSet(seconds:(minutesVal * 60), nodeid:zwaveHubNodeId)
+  return zwave.wakeUpV2.wakeUpIntervalSet(seconds:(minutesVal * 60), nodeid:zwaveHubNodeId).format()
 }
 
 
 private wakeUpNoMoreInfoCmd() {
-  return zwave.wakeUpV2.wakeUpNoMoreInformation()
+  return zwave.wakeUpV2.wakeUpNoMoreInformation().format()
 }
 
 
 private batteryGetCmd() {
-  return zwave.batteryV1.batteryGet()
+  return zwave.batteryV1.batteryGet().format()
 }
 
 
 private configGetCmd(paramNum) {
-  return zwave.configurationV1.configurationGet(parameterNumber: paramNum)
+  return zwave.configurationV1.configurationGet(parameterNumber: paramNum).format()
 }
 
 
 private configSetCmd(paramNum, size, val) {
-  return zwave.configurationV1.configurationSet(parameterNumber: paramNum, size: size, scaledConfigurationValue: val)
+  return zwave.configurationV1.configurationSet(parameterNumber: paramNum, size: size, scaledConfigurationValue: val).format()
 }
 
 
