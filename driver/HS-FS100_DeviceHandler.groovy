@@ -1,7 +1,7 @@
 /**
  *  HS-FS100+
  *
- *  Copyright 2019 HomeSeer
+ *  Copyright 2019 HomeSeer, Eric Dalquist
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -13,6 +13,7 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * Version 1.0 2/14/19
+ * Version 1.1 2/24/19 - eric.dalquist@ Port to Hubitat
  */
 metadata {
   definition (
@@ -212,16 +213,7 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv2.WakeUpNotification cmd)
     
   result << wakeUpNoMoreInfoCmd()
   
-  return sendResponse(result)
-}
-
-
-private sendResponse(cmds) {
-  logTrace "sendResponse $cmds"
-
-  sendHubCommand(cmds.collect{ new hubitat.device.HubAction(it.format()) }, 1000)
-
-  return []
+  return response(result)
 }
 
 
