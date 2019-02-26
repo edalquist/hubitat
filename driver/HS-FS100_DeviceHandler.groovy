@@ -17,22 +17,22 @@
  */
 metadata {
   definition (
-    name: "HomeSeer Flex Sensor", 
-    namespace: "HomeSeer", 
+    name: "HomeSeer Flex Sensor",
+    namespace: "HomeSeer",
     author: "support@homeseer.com"
   ) {
-    capability "Water Sensor" 
+    capability "Water Sensor"
     capability "Battery"
     capability "Configuration"
     capability "Refresh"
     capability "Temperature Measurement"
-    
-    attribute "lastCheckin", "string"   
-    
+
+    attribute "lastCheckin", "string"
+
     fingerprint mfr:"000C", prod:"0202", model:"0001"
   }
-  
-  preferences {   
+
+  preferences {
     input "tempReporting", "enum",
       title: "Temperature Reporting Interval:",
       defaultValue: tempReportingSetting,
@@ -63,23 +63,23 @@ metadata {
       required: false,
       displayDuringSetup: false,
       options: waterDetectionBuzzerFrequencyOptions.collect { it.name }
-            
-            
+
+
   }
 }
 
 
 // Sets flag so that configuration is updated the next time it wakes up.
-def updated() { 
+def updated() {
   // This method always gets called twice when preferences are saved.
-  if (!isDuplicateCommand(state.lastUpdated, 3000)) {   
+  if (!isDuplicateCommand(state.lastUpdated, 3000)) {
     state.lastUpdated = new Date().time
     logTrace "updated()"
 
 
     logForceWakeupMessage "The configuration will be updated the next time the device wakes up."
     state.pendingChanges = true
-  }   
+  }
 }
 
 
@@ -88,46 +88,46 @@ def configure() {
   logTrace "configure()"
   def cmds = []
   def refreshAll = (!state.isConfigured || state.pendingRefresh || !settings?.ledEnabled)
-  
+
   if (!state.isConfigured) {
-    //logTrace "Waiting 1 second because this is the first time being configured"   
-    sendEvent(getEventMap("light", "nolight", false))   
+    //logTrace "Waiting 1 second because this is the first time being configured"
+    sendEvent(getEventMap("light", "nolight", false))
     //cmds << "delay 1000"
   }
-  
-  configData.sort { it.paramNum }.each { 
-    cmds += updateConfigVal(it.paramNum, it.size, it.value, refreshAll) 
+
+  configData.sort { it.paramNum }.each {
+    cmds += updateConfigVal(it.paramNum, it.size, it.value, refreshAll)
   }
-  
+
   if (!cmds) {
     state.pendingChanges = false
   }
-  
+
   if (refreshAll || canReportBattery()) {
     cmds << batteryGetCmd()
   }
-  
+
   //initializeCheckin()
   //cmds << wakeUpIntervalSetCmd(checkinIntervalSettingMinutes)
-    
+
   if (cmds) {
     logDebug "Sending configuration to device."
     return delayBetween(cmds, 1000)
   }
   else {
     return cmds
-  } 
+  }
 }
 
 
 private updateConfigVal(paramNum, paramSize, val, refreshAll) {
   def result = []
   def configVal = state["configVal${paramNum}"]
-  
+
   if (refreshAll || (configVal != val)) {
     result << configSetCmd(paramNum, paramSize, val)
     result << configGetCmd(paramNum)
-  } 
+  }
   return result
 }
 
@@ -135,13 +135,13 @@ private updateConfigVal(paramNum, paramSize, val, refreshAll) {
 private initializeCheckin() {
   // Set the Health Check interval so that it can be skipped once plus 2 minutes.
   def checkInterval = ((checkinIntervalSettingMinutes * 2 * 60) + (2 * 60))
-  
+
   sendEvent(name: "checkInterval", value: checkInterval, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID])
 }
 
 
 // Forces the configuration to be resent to the device the next time it wakes up.
-def refresh() { 
+def refresh() {
   logForceWakeupMessage "The sensor data will be refreshed the next time the device wakes up."
   state.pendingRefresh = true
   configure()
@@ -156,11 +156,11 @@ private logForceWakeupMessage(msg) {
 // Processes messages received from device.
 def parse(String description) {
   def result = []
-    
+
   logTrace "parse description: $description"
-  
-  sendEvent(name: "lastCheckin", value: convertToLocalTimeString(new Date()), displayed: false, isStateChange: true)  
-  
+
+  sendEvent(name: "lastCheckin", value: convertToLocalTimeString(new Date()), displayed: false, isStateChange: true)
+
   def cmd = zwave.parse(description, commandClassVersions)
   if (cmd) {
     result += zwaveEvent(cmd)
@@ -196,7 +196,7 @@ private getCommandClassVersions() {
 def zwaveEvent(hubitat.zwave.commands.wakeupv2.WakeUpNotification cmd)
 {
   def result = []
-  
+
   if (state.pendingChanges != false) {
     result += configure()
   }
@@ -206,13 +206,13 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv2.WakeUpNotification cmd)
   else {
     logTrace "Skipping battery check because it was already checked within the last ${batteryReportingIntervalSetting}."
   }
-  
+
   //if (result) {
   //  result << "delay 2000"
   //}
-    
+
   result << wakeUpNoMoreInfoCmd()
-  
+
   return response(result)
 }
 
@@ -224,42 +224,42 @@ def zwaveEvent(hubitat.zwave.commands.batteryv1.BatteryReport cmd) {
   if (val > 100) {
     val = 100
   }
-  state.lastBatteryReport = new Date().time 
+  state.lastBatteryReport = new Date().time
   logDebug "Battery ${val}%"
   [
     createEvent(getEventMap("battery", val, null, null, "%"))
   ]
-} 
+}
 
 
 // Stores the configuration values so that it only updates them when they've changed or a refresh was requested.
-def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {  
+def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
   def name = configData.find { it.paramNum == cmd.parameterNumber }?.name
-  if (name) { 
+  if (name) {
     def val = hexToInt(cmd.configurationValue, cmd.size)
-  
+
     logDebug "${name} = ${val}"
-  
+
     state."configVal${cmd.parameterNumber}" = val
   }
   else {
     logDebug "Parameter ${cmd.parameterNumber}: ${cmd.configurationValue}"
   }
   state.isConfigured = true
-  state.pendingRefresh = false  
+  state.pendingRefresh = false
   return []
 }
 
 
 // Creates water events.
 def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
-  def result = [] 
+  def result = []
   logTrace "NotificationReport: $cmd"
-  
+
   if (cmd.notificationType == 0x14) {
     switch (cmd.event) {
       case 0:
-        logDebug "Sensor No Light"        
+        logDebug "Sensor No Light"
         result << createEvent(getEventMap("light", "nolight"))
         break
       case 1:
@@ -276,7 +276,7 @@ def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
   } else if (cmd.notificationType == 0x05) {
     switch (cmd.event) {
       case 0:
-        logDebug "Sensor is Dry"        
+        logDebug "Sensor is Dry"
         result << createEvent(getEventMap("water", "dry"))
         break
       case 2:
@@ -293,14 +293,14 @@ def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
 
 def zwaveEvent(hubitat.zwave.commands.sensormultilevelv5.SensorMultilevelReport cmd) {
   logTrace "SensorMultilevelReport: ${cmd}"
-    
+
   def result = []
   if (cmd.sensorType == 1) {
     result += handleTemperatureEvent(cmd)
   }
   else {
     logDebug "Unknown Sensor Type: ${cmd}"
-  } 
+  }
   return result
 }
 
@@ -308,19 +308,19 @@ def zwaveEvent(hubitat.zwave.commands.sensormultilevelv5.SensorMultilevelReport 
 private handleTemperatureEvent(cmd) {
   def result = []
   def cmdScale = cmd.scale == 1 ? "F" : "C"
-  
-  def val = convertTemperatureIfNeeded(cmd.scaledSensorValue, cmdScale, cmd.precision)  
-    
+
+  def val = convertTemperatureIfNeeded(cmd.scaledSensorValue, cmdScale, cmd.precision)
+
   if ("$val".endsWith(".")) {
     val = safeToInt("${val}"[0..-2])
   }
-      
+
   result << createEvent(createEventMap("temperature", val, null, "Temperature ${val}${getTemperatureScale()}", getTemperatureScale()))
   return result
 }
 
 
-private createEventMap(name, value, displayed=null, desc=null, unit=null) { 
+private createEventMap(name, value, displayed=null, desc=null, unit=null) {
   def eventMap = [
     name: name,
     value: value,
@@ -366,7 +366,7 @@ def zwaveEvent(hubitat.zwave.Command cmd) {
 }
 
 
-private getEventMap(name, value, displayed=null, desc=null, unit=null) {  
+private getEventMap(name, value, displayed=null, desc=null, unit=null) {
   def isStateChange = (device.currentValue(name) != value)
   displayed = (displayed == null ? isStateChange : displayed)
   def eventMap = [
@@ -380,7 +380,7 @@ private getEventMap(name, value, displayed=null, desc=null, unit=null) {
   }
   if (unit) {
     eventMap.unit = unit
-  } 
+  }
   logTrace "Creating Event: ${eventMap}"
   return eventMap
 }
@@ -389,7 +389,7 @@ private getEventMap(name, value, displayed=null, desc=null, unit=null) {
 private wakeUpIntervalSetCmd(minutesVal) {
   state.checkinIntervalMinutes = minutesVal
   logTrace "wakeUpIntervalSetCmd(${minutesVal})"
-  
+
   return zwave.wakeUpV2.wakeUpIntervalSet(seconds:(minutesVal * 60), nodeid:zwaveHubNodeId).format()
 }
 
@@ -416,8 +416,8 @@ private configSetCmd(paramNum, size, val) {
 
 private canReportBattery() {
   def reportEveryMS = (batteryReportingIntervalSettingMinutes * 60 * 1000)
-    
-  return (!state.lastBatteryReport || ((new Date().time) - state.lastBatteryReport > reportEveryMS)) 
+
+  return (!state.lastBatteryReport || ((new Date().time) - state.lastBatteryReport > reportEveryMS))
 }
 
 
@@ -455,7 +455,7 @@ private getConfigData() {
     [paramNum: 4, name: "Notification Buzzer", value: convertOptionSettingToInt(notificationBuzzerOptions, notificationBuzzerSetting), size: 1],
     [paramNum: 5, name: "Light Detection Delay (detect blinking)", value: convertOptionSettingToInt(lightDetectionDelayOptions, lightDetectionDelaySetting), size: 1],
     [paramNum: 2, name: "Water Detectiong Buzzer Frequency (with water cable)", value: convertOptionSettingToInt(WaterDetectionBuzzerFrequencyOptions, WaterDetectionBuzzerFrequencySetting), size: 1]
-  ] 
+  ]
 }
 
 
@@ -484,7 +484,7 @@ private getNotificationBuzzerOptions() {
 }
 
 private getLightDetectionDelayOptions() {
-  [   
+  [
     [name: formatDefaultOptionName("0 Seconds"), value: 0],
     [name: "1 Second", value: 1],
     [name: "2 Seconds", value: 2],
@@ -510,7 +510,7 @@ private getLightDetectionDelayOptions() {
 }
 
 private getWaterDetectionBuzzerFrequencyOptions() {
-  [   
+  [
     [name: formatDefaultOptionName("Every 10 Minutes"), value: 10],
     [name: "Every 5 Minutes", value: 5],
     [name: "Every 30 Minutes", value: 30]
@@ -577,12 +577,12 @@ private convertToLocalTimeString(dt) {
   }
   else {
     return "$dt"
-  } 
+  }
 }
 
 
 private isDuplicateCommand(lastExecuted, allowedMil) {
-  !lastExecuted ? false : (lastExecuted + allowedMil > new Date().time) 
+  !lastExecuted ? false : (lastExecuted + allowedMil > new Date().time)
 }
 
 
