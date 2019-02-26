@@ -175,7 +175,7 @@ def parse(String description) {
 private getCommandClassVersions() {
   [
     0x30: 2,  // Sensor Binary
-    0x25: 1,    // switch binary
+    0x25: 1,  // switch binary
     0x31: 5,  // Sensor Multilevel
     0x59: 1,  // AssociationGrpInfo
     0x5A: 1,  // DeviceResetLocally
