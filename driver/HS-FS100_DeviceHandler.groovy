@@ -266,9 +266,22 @@ def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
         logDebug "Sensor Detects Light"
         result << createEvent(getEventMap("light", "light"))
         break
-            case 2:
+      case 2:
         logDebug "Sensor Detects Color Change"
         result << createEvent(getEventMap("light", "colorchange"))
+        break
+      default:
+        logDebug "Sensor is ${cmd.event}"
+    }
+  } else if (cmd.notificationType == 0x05) {
+    switch (cmd.event) {
+      case 0:
+        logDebug "Sensor is Dry"        
+        result << createEvent(getEventMap("water", "dry"))
+        break
+      case 2:
+        logDebug "Sensor is Wet"
+        result << createEvent(getEventMap("water", "wet"))
         break
       default:
         logDebug "Sensor is ${cmd.event}"
