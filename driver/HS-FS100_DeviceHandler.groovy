@@ -1,7 +1,16 @@
 /**
- *  HS-FS100+
+ *  HUBITAT: HomeSeer HS-FS100+ Z-Wave Multi Sensor
+ *  (Model: HS-FS100+)
  *
- *  Copyright 2019 HomeSeer, Eric Dalquist
+ *  Author:
+ *    Kevin LaFramboise (krlaframboise)
+ *    HomeSeer Inc
+ *    Eric Dalquist
+ *
+ *  Changelog:
+ *    - Version 1.0 2/14/19 (HomeSeer port of krlaframboise DH)
+ *    - Version 1.1 2/24/19 - eric.dalquist@ Port to Hubitat
+ *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -12,8 +21,6 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * Version 1.0 2/14/19
- * Version 1.1 2/24/19 - eric.dalquist@ Port to Hubitat
  */
 metadata {
   definition (
@@ -39,25 +46,25 @@ metadata {
       required: false,
       displayDuringSetup: false,
       options: tempReportingOptions.collect { it.name }
-        input "lightSensitivity", "enum",
+    input "lightSensitivity", "enum",
       title: "Light Sensitivity (with light cable):",
       defaultValue: lightSensitivitySetting,
       required: false,
       displayDuringSetup: false,
       options: lightSensitivityOptions.collect { it.name }
-        input "notificationBuzzer", "enum",
+    input "notificationBuzzer", "enum",
       title: "Notification Buzzer:",
       defaultValue: notificationBuzzerSetting,
       required: false,
       displayDuringSetup: false,
       options: notificationBuzzerOptions.collect { it.name }
-        input "lightDetectionDelay", "enum",
+    input "lightDetectionDelay", "enum",
       title: "Light Detection Delay (detect blinking):",
       defaultValue: lightDetectionDelaySetting,
       required: false,
       displayDuringSetup: false,
       options: lightDetectionDelayOptions.collect { it.name }
-        input "waterDetectionBuzzerFrequency", "enum",
+    input "waterDetectionBuzzerFrequency", "enum",
       title: "Water Detection Buzzer Frequency (with water cable):",
       defaultValue: waterDetectionBuzzerFrequencySetting,
       required: false,
@@ -172,6 +179,7 @@ def parse(String description) {
 }
 
 
+// From https://products.z-wavealliance.org/products/3050/classes
 private getCommandClassVersions() {
   [
     0x30: 2,  // Sensor Binary
