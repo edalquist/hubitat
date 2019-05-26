@@ -342,7 +342,7 @@ def parse(description) {
  *  Short   value   0xFF for on, 0x00 for off
  **/
 def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
-  if (state.debug) log.trace "${device.displayName}: zwaveEvent(): BasicReport received: ${cmd}"
+  if (state.debug) log.trace "${device.displayName}: zwaveEvent(): BasicReport received: ${cmd} (ignored)"
   // BasicReports are ignored as the aggregate switch and level attributes are calculated seperately.
 }
 
@@ -618,16 +618,6 @@ def updated() {
   if (!state.updatedLastRanAt || now() >= state.updatedLastRanAt + 2000) {
     state.updatedLastRanAt = now()
 
-/*
-    for (section in preferences?.sections) {
-      for (input in section?.input) {
-        if (input.name == null) continue;
-        def value = device.preferences[input.name]
-        log.trace "- ${input.name}[${input.defaultValue}]=${value}"
-      }
-    }
-*/
-
     // Make sure installation has completed:
     if (!state.installVersion || state.installVersion != VERSION) {
       installed()
@@ -665,7 +655,9 @@ def updated() {
     if ( state.isRGBW & ( state.isIN || state.isOUT ) ) log.warn "${device.displayName}: updated(): Invalid combination of RGBW and IN/OUT channels detected. You may get weird behaviour!"
 
     // Call configure() and refresh():
-    return response(configure() + refresh())
+    cmds = configure() + refresh()
+    log.debug "Sending update commands: ${cmds}"
+    return cmds
   }
   else {
     log.debug "updated(): Ran within last 2 seconds so aborting."
@@ -725,7 +717,9 @@ def configure() {
 
   log.warn "${device.displayName}: configure(): Device Parameters are being updated. It is recommended to power-cycle the Fibaro device once completed."
 
-  return delayBetween(cmds, 500) + getConfigReport()
+  cmds = delayBetween(cmds, 500) + getConfigReport()
+  log.debug "Sending configure commands: ${cmds}"
+  return cmds
 }
 
 /**
@@ -847,7 +841,7 @@ def refresh() {
 
   cmds << zwave.meterV3.meterGet(scale: 0).format() // Get energy MeterReport
   cmds << zwave.meterV3.meterGet(scale: 2).format() // Get power MeterReport
-  delayBetween(cmds,200)
+  delayBetween(cmds, 200)
 }
 
 
@@ -1235,7 +1229,7 @@ private setLevelChX(level, channel) {
  *  The device settings in the UI cannot be updated due to platform restrictions.
  */
 def getConfigReport() {
-  if (state.debug) log.trace "${device.displayName}: getConfigReport(2)"
+  if (state.debug) log.trace "${device.displayName}: getConfigReport()"
   def cmds = []
 
   cmds << zwave.configurationV1.configurationGet(parameterNumber: 1).format()
@@ -1271,5 +1265,7 @@ def getConfigReport() {
   cmds << zwave.versionV1.versionGet().format()
   cmds << zwave.firmwareUpdateMdV2.firmwareMdGet().format()
 
-  return delayBetween(cmds)
+  cmds = delayBetween(cmds, 200)
+  log.debug "Sending getConfigReport commands: ${cmds}"
+  return cmds
 }
