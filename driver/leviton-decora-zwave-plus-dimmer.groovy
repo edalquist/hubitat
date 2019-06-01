@@ -10,6 +10,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ * Cloned from: https://github.com/jasonxh/SmartThings-jasonxh/blob/master/devicetypes/jasonxh/leviton-decora-zwave-plus-dimmer.src/leviton-decora-zwave-plus-dimmer.groovy
  */
 metadata {
     definition (name: "Leviton Decora Z-Wave Plus Dimmer", namespace: "jasonxh", author: "Jason Xia", ocfDeviceType: "oic.d.light") {
@@ -32,6 +33,7 @@ metadata {
         attribute "fadeOffTime", "number"
         attribute "levelIndicatorTimeout", "number"
         attribute "firmwareVersion", "string"
+        attribute "indicatorStatus", "enum", ["when off", "when on", "never"]
 
         command "low"
         command "medium"
@@ -43,111 +45,10 @@ metadata {
         fingerprint mfr:"001D", prod:"3301", model:"0001", deviceJoinName: "Leviton Decora Z-Wave Plus 1000W Dimmer"
     }
 
-    simulator {
-        // TODO - the simulator is not working yet
-        status "on":  "command: 2003, payload: FF"
-        status "off": "command: 2003, payload: 00"
-        status "09%": "command: 2003, payload: 09"
-        status "10%": "command: 2003, payload: 0A"
-        status "33%": "command: 2003, payload: 21"
-        status "66%": "command: 2003, payload: 42"
-        status "99%": "command: 2003, payload: 63"
-
-        reply "2001FF,delay 5000,2602": "command: 2603, payload: FF"
-        reply "200100,delay 5000,2602": "command: 2603, payload: 00"
-        reply "200119,delay 5000,2602": "command: 2603, payload: 19"
-        reply "200132,delay 5000,2602": "command: 2603, payload: 32"
-        reply "20014B,delay 5000,2602": "command: 2603, payload: 4B"
-        reply "200163,delay 5000,2602": "command: 2603, payload: 63"
-    }
-
-    tiles(scale: 2) {
-        multiAttributeTile(name: "switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
-            tileAttribute("device.switch", key: "PRIMARY_CONTROL") {
-                attributeState "on", label: '${name}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#00a0dc", nextState: "turningOff"
-                attributeState "off", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff", nextState: "turningOn"
-                attributeState "turningOn", label: '${name}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#00a0dc", nextState: "turningOff"
-                attributeState "turningOff", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff", nextState: "turningOn"
-            }
-            tileAttribute("device.level", key: "VALUE_CONTROL") {
-                attributeState "VALUE_UP", action:"levelUp"
-                attributeState "VALUE_DOWN", action:"levelDown"
-            }
-            tileAttribute("device.level", key: "SLIDER_CONTROL") {
-                attributeState "level", label: '${currentValue} %', action: "switch level.setLevel"
-            }
-        }
-
-        standardTile("low", "device.level", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: 'LOW', action: "low", icon: "st.Lighting.light14"
-        }
-
-        standardTile("medium", "device.level", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: 'MED', action: "medium", icon: "st.Lighting.light13"
-        }
-
-        standardTile("high", "device.level", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: 'HIGH', action: "high", icon: "st.Lighting.light11"
-        }
-
-        standardTile("refresh", "device.switch", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: '', action: "refresh.refresh", icon: "st.secondary.refresh"
-        }
-
-        valueTile("firmwareVersion", "device.firmwareVersion", width: 4, height: 2, decoration: "flat") {
-            state "firmwareVersion", label: 'Firmware Version\n${currentValue}'
-        }
-
-        valueTile("loadType", "device.loadType", width: 3, height: 1, decoration: "flat") {
-            state "loadType", label: 'Load Type\n${currentValue}'
-        }
-
-        valueTile("indicatorStatus", "device.indicatorStatus", width: 3, height: 1, decoration: "flat") {
-            state "indicatorStatus", label: 'Indicator Status\n${currentValue}'
-        }
-
-        valueTile("presetLevel", "device.presetLevel", width: 3, height: 1, decoration: "flat") {
-            state "presetLevel", label: 'Preset Level\n${currentValue}'
-        }
-
-        valueTile("minLevel", "device.minLevel", width: 3, height: 1, decoration: "flat") {
-            state "minLevel", label: 'Min Level\n${currentValue}'
-        }
-
-        valueTile("maxLevel", "device.maxLevel", width: 3, height: 1, decoration: "flat") {
-            state "maxLevel", label: 'Max Level\n${currentValue}'
-        }
-
-        valueTile("fadeOnTime", "device.fadeOnTime", width: 3, height: 1, decoration: "flat") {
-            state "fadeOnTime", label: 'Fade-on Time\n${currentValue}'
-        }
-
-        valueTile("fadeOffTime", "device.fadeOffTime", width: 3, height: 1, decoration: "flat") {
-            state "fadeOffTime", label: 'Fade-off Time\n${currentValue}'
-        }
-
-        valueTile("levelIndicatorTimeout", "device.levelIndicatorTimeout", width: 3, height: 1, decoration: "flat") {
-            state "levelIndicatorTimeout", label: 'Level Indicator Timeout\n${currentValue}'
-        }
-
-        main("switch")
-        details(["switch",
-                 "low", "medium", "high",
-                 "refresh", "firmwareVersion",
-                 "loadType", "indicatorStatus",
-                 "minLevel", "maxLevel",
-                 "fadeOnTime", "fadeOffTime",
-                 "presetLevel", "levelIndicatorTimeout"])
-    }
-
     preferences {
         input name: "levelIncrement", type: "number", title: "In-App Level Increment",
                 description: "1 - 100 (default $defaultLevelIncrement)", range: "1..100", defaultValue: defaultLevelIncrement,
                 displayDuringSetup: false, required: false
-
-        input type: "paragraph", element: "paragraph", title: "Device Preferences",
-                description: "The following preferences are configuring the device behaviors. " +
-                        "All of them are optional. Leave a preference empty to skip configuring it."
 
         input name: "loadType", type: "enum", title: "Load type",
                 options: ["Incandescent (default)", "LED", "CFL"],
@@ -156,10 +57,8 @@ metadata {
                 options: ["When switch is off (default)", "When switch is on", "Never"],
                 displayDuringSetup: false, required: false
         input name: "presetLevel", type: "number", title: "Light turns on to level",
-                description: "0 to 100 (default 0)", range: "0..100",
+                description: "0 to 100 (default 0)\n0 = last dim level (default)\n1 - 100 = fixed level", range: "0..100",
                 displayDuringSetup: false, required: false
-        input type: "paragraph", element: "paragraph", title: "",
-                description: "0 = last dim level (default)\n1 - 100 = fixed level"
         input name: "minLevel", type: "number", title: "Minimum light level",
                 description: "0 to 100 (default 10)", range: "0..100",
                 displayDuringSetup: false, required: false
@@ -167,21 +66,20 @@ metadata {
                 description: "0 to 100 (default 100)", range: "0..100",
                 displayDuringSetup: false, required: false
         input name: "fadeOnTime", type: "number", title: "Fade-on time",
-                description: "0 to 253 (default 2)", range: "0..253",
+                description: "0 to 253 (default 2)\n0 = instant on\n1 - 127 = 1 - 127 seconds (default 2)\n128 - 253 = 1 - 126 minutes", range: "0..253",
                 displayDuringSetup: false, required: false
-        input type: "paragraph", element: "paragraph", title: "",
-                description: "0 = instant on\n1 - 127 = 1 - 127 seconds (default 2)\n128 - 253 = 1 - 126 minutes"
         input name: "fadeOffTime", type: "number", title: "Fade-off time",
-                description: "0 to 253 (default 2)", range: "0..253",
+                description: "0 to 253 (default 2)\n0 = instant off\n1 - 127 = 1 - 127 seconds (default 2)\n128 - 253 = 1 - 126 minutes", range: "0..253",
                 displayDuringSetup: false, required: false
-        input type: "paragraph", element: "paragraph", title: "",
-                description: "0 = instant off\n1 - 127 = 1 - 127 seconds (default 2)\n128 - 253 = 1 - 126 minutes"
         input name: "levelIndicatorTimeout", type: "number", title: "Dim level indicator timeout",
-                description: "0 to 255 (default 3)", range: "0..255",
+                description: "0 to 255 (default 3)\n0 = dim level indicator off\n1 - 254 = timeout in seconds (default 3)\n255 = dim level indicator always on", range: "0..255",
                 displayDuringSetup: false, required: false
-        input type: "paragraph", element: "paragraph", title: "",
-                description: "0 = dim level indicator off\n1 - 254 = timeout in seconds (default 3)\n255 = dim level indicator always on"
     }
+}
+
+def logsOff(){
+    log.warn "debug logging disabled..."
+    // device.updateSetting("logEnable",[value:"false",type:"bool"])
 }
 
 def installed() {
@@ -345,19 +243,19 @@ private initialize() {
     sendEvent(name: "checkInterval", value: 2 * 15 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
     dimmerEvent(cmd.value)
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd) {
     dimmerEvent(cmd.value)
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelStopLevelChange cmd) {
+private zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelStopLevelChange cmd) {
     response(zwave.switchMultilevelV1.switchMultilevelGet().format())
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd) {
     if (cmd.value == 0) {
         switchEvent(false)
     } else if (cmd.value == 255) {
@@ -367,42 +265,66 @@ private zwaveEvent(physicalgraph.zwave.commands.switchbinaryv1.SwitchBinaryRepor
     }
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
     def result = null
     switch (cmd.parameterNumber) {
         case 1:
+            fadeOnTime = cmd.configurationValue[0]
             result = createEvent(name: "fadeOnTime", value: cmd.configurationValue[0])
             break
         case 2:
+            fadeOffTime = cmd.configurationValue[0]
             result = createEvent(name: "fadeOffTime", value: cmd.configurationValue[0])
             break
         case 3:
+            minLevel = cmd.configurationValue[0]
             result = createEvent(name: "minLevel", value: cmd.configurationValue[0])
             break
         case 4:
+            maxLevel = cmd.configurationValue[0]
             result = createEvent(name: "maxLevel", value: cmd.configurationValue[0])
             break
         case 5:
+            presetLevel = cmd.configurationValue[0]
             result = createEvent(name: "presetLevel", value: cmd.configurationValue[0])
             break
         case 6:
+            levelIndicatorTimeout = cmd.configurationValue[0]
             result = createEvent(name: "levelIndicatorTimeout", value: cmd.configurationValue[0])
             break
         case 7:
             def value = null
             switch (cmd.configurationValue[0]) {
-                case 0: value = "never"; break
-                case 254: value = "when on"; break
-                case 255: value = "when off"; break
+                case 0:
+                    value = "never";
+                    indicatorStatus = "Never";
+                    break
+                case 254:
+                    value = "when on";
+                    indicatorStatus = "When switch is on";
+                    break
+                case 255:
+                    value = "when off";
+                    indicatorStatus = "When switch is off (default)";
+                    break
             }
             result = createEvent(name: "indicatorStatus", value: value)
             break
         case 8:
             def value = null
             switch (cmd.configurationValue[0]) {
-                case 0: value = "incandescent"; break
-                case 1: value = "led"; break
-                case 2: value = "cfl"; break
+                case 0:
+                    value = "incandescent";
+                    loadType = "Incandescent (default)";
+                    break
+                case 1:
+                    value = "LED";
+                    loadType = "LED";
+                    break
+                case 2:
+                    value = "CFL";
+                    loadType = "CFL"
+                    break
             }
             result = createEvent(name: "loadType", value: value)
             break
@@ -410,7 +332,7 @@ private zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationRep
     result
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
     log.debug "manufacturerId:   $cmd.manufacturerId"
     log.debug "manufacturerName: $cmd.manufacturerName"
     log.debug "productId:        $cmd.productId"
@@ -421,15 +343,15 @@ private zwaveEvent(physicalgraph.zwave.commands.manufacturerspecificv2.Manufactu
     createEvent([descriptionText: "$device.displayName MSR: $msr", isStateChange: false])
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.hailv1.Hail cmd) {
+private zwaveEvent(hubitat.zwave.commands.hailv1.Hail cmd) {
     createEvent(name: "hail", value: "hail", descriptionText: "Switch button was pressed", displayed: false)
 }
 
-private zwaveEvent(physicalgraph.zwave.commands.versionv1.VersionReport cmd) {
+private zwaveEvent(hubitat.zwave.commands.versionv1.VersionReport cmd) {
     createEvent(name: "firmwareVersion", value: "${cmd.applicationVersion}.${cmd.applicationSubVersion}", displayed: false)
 }
 
-private zwaveEvent(physicalgraph.zwave.Command cmd) {
+private zwaveEvent(hubitat.zwave.Command cmd) {
     log.warn "Unhandled zwave command $cmd"
 }
 
