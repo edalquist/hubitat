@@ -13,7 +13,7 @@
  * Cloned from: https://github.com/jasonxh/SmartThings-jasonxh/blob/master/devicetypes/jasonxh/leviton-decora-zwave-plus-dimmer.src/leviton-decora-zwave-plus-dimmer.groovy
  */
 metadata {
-    definition (name: "Leviton Decora Z-Wave Plus Dimmer", namespace: "jasonxh", author: "Jason Xia", ocfDeviceType: "oic.d.light") {
+    definition(name: "Leviton Decora Z-Wave Plus Dimmer", namespace: "jasonxh", author: "Jason Xia", ocfDeviceType: "oic.d.light") {
         capability "Actuator"
         capability "Configuration"
         capability "Health Check"
@@ -41,8 +41,8 @@ metadata {
         command "levelUp"
         command "levelDown"
 
-        fingerprint mfr:"001D", prod:"3201", model:"0001", deviceJoinName: "Leviton Decora Z-Wave Plus 600W Dimmer"
-        fingerprint mfr:"001D", prod:"3301", model:"0001", deviceJoinName: "Leviton Decora Z-Wave Plus 1000W Dimmer"
+        fingerprint mfr: "001D", prod: "3201", model: "0001", deviceJoinName: "Leviton Decora Z-Wave Plus 600W Dimmer"
+        fingerprint mfr: "001D", prod: "3301", model: "0001", deviceJoinName: "Leviton Decora Z-Wave Plus 1000W Dimmer"
     }
 
     preferences {
@@ -77,7 +77,7 @@ metadata {
     }
 }
 
-def logsOff(){
+def logsOff() {
     log.warn "debug logging disabled..."
     // device.updateSetting("logEnable",[value:"false",type:"bool"])
 }
@@ -109,19 +109,19 @@ def configure() {
         commands << setIndicatorStatus(indicatorStatus)
     }
     if (presetLevel != null) {
-        commands << setPresetLevel(presetLevel )
+        commands << setPresetLevel(presetLevel)
     }
     if (minLevel != null) {
-        commands << setMinLevel(minLevel )
+        commands << setMinLevel(minLevel)
     }
     if (maxLevel != null) {
-        commands << setMaxLevel(maxLevel )
+        commands << setMaxLevel(maxLevel)
     }
     if (fadeOnTime != null) {
-        commands << setFadeOnTime(fadeOnTime )
+        commands << setFadeOnTime(fadeOnTime)
     }
     if (fadeOffTime != null) {
-        commands << setFadeOffTime(fadeOffTime )
+        commands << setFadeOffTime(fadeOffTime)
     }
     if (levelIndicatorTimeout != null) {
         commands << setLevelIndicatorTimeout(levelIndicatorTimeout)
@@ -135,7 +135,7 @@ def configure() {
 
 def parse(String description) {
     def result = null
-    def cmd = zwave.parse(description, [0x20: 1, 0x25:1, 0x26: 1, 0x70: 1, 0x72: 2])
+    def cmd = zwave.parse(description, [0x20: 1, 0x25: 1, 0x26: 1, 0x70: 1, 0x72: 2])
     if (cmd) {
         result = zwaveEvent(cmd)
         log.debug "Parsed $cmd to $result"
@@ -150,7 +150,7 @@ def on() {
     def presetLevel = device.currentValue("presetLevel")
 
     duration = fadeOnTime == null ? 255 : fadeOnTime
-    level = presetLevel == null || presetLevel == 0 ? 0xFF : toZwaveLevel(presetLevel )
+    level = presetLevel == null || presetLevel == 0 ? 0xFF : toZwaveLevel(presetLevel)
     delayBetween([
             zwave.switchMultilevelV2.switchMultilevelSet(value: level, dimmingDuration: duration).format(),
             zwave.switchMultilevelV1.switchMultilevelGet().format()
@@ -169,7 +169,7 @@ def off() {
 
 def setLevel(value, durationSeconds = null) {
     log.debug "setLevel >> value: $value, durationSeconds: $durationSeconds"
-    level = toDisplayLevel(value )
+    level = toDisplayLevel(value)
     dimmingDuration = durationSeconds == null ? 255 : secondsToDuration(durationSeconds as int)
 
     sendEvent(name: "level", value: level, unit: "%")
@@ -239,6 +239,7 @@ def levelDown() {
 
 
 private static int getCommandDelayMs() { 1000 }
+
 private static int getDefaultLevelIncrement() { 10 }
 
 private initialize() {
@@ -425,10 +426,10 @@ private secondsToDuration(int seconds) {
 }
 
 private configurationCommand(parameterNumber, value, fieldSize = 1) {
-    if (fieldSize == null)  fieldSize = 1;
+    if (fieldSize == null) fieldSize = 1;
     return [
-        zwave.configurationV1.configurationSet(scaledConfigurationValue: value, parameterNumber: parameterNumber, size: fieldSize).format(),
-        zwave.configurationV1.configurationGet(parameterNumber: parameterNumber).format()
+            zwave.configurationV1.configurationSet(scaledConfigurationValue: value, parameterNumber: parameterNumber, size: fieldSize).format(),
+            zwave.configurationV1.configurationGet(parameterNumber: parameterNumber).format()
     ]
 }
 
@@ -478,9 +479,9 @@ private setLoadType(String loadType) {
 
 private setIndicatorStatus(String status) {
     switch (indicatorStatus) {
-        case "When switch is off (default)":    return indicatorWhenOff()
-        case "When switch is on":               return indicatorWhenOn()
-        case "Never":                           return indicatorNever()
+        case "When switch is off (default)": return indicatorWhenOff()
+        case "When switch is on": return indicatorWhenOn()
+        case "Never": return indicatorNever()
     }
 }
 

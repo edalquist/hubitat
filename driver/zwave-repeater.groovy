@@ -23,7 +23,7 @@
  * TODO(edalquist) support https://products.z-wavealliance.org/products/2520/configs
  */
 metadata {
-    definition (name: "Z-Wave Repeater", namespace: "smartthings", author: "jhamstead") {
+    definition(name: "Z-Wave Repeater", namespace: "smartthings", author: "jhamstead") {
         capability "Health Check"
         capability "Refresh"
         capability "Configuration"
@@ -53,10 +53,10 @@ def parse(String description) {
 }
 
 def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
-    Map myMap = [name: "status", isStateChange: false, displayed: false, value: 'online', descriptionText: "$device.displayName is online" ]
-    if (device.currentValue('status') != 'online' || state.manualPress ) {
-       myMap.displayed = true
-       myMap.isStateChange = true
+    Map myMap = [name: "status", isStateChange: false, displayed: false, value: 'online', descriptionText: "$device.displayName is online"]
+    if (device.currentValue('status') != 'online' || state.manualPress) {
+        myMap.displayed = true
+        myMap.isStateChange = true
     }
     state.failedTries = 0
     state.manualPress = false
@@ -94,12 +94,12 @@ def refresh() {
 
 // Private methods
 def sendRequest() {
-    Map myMap = [name: "status", isStateChange: true, displayed: true, value: 'offline', descriptionText: "$device.displayName is offline" ]
+    Map myMap = [name: "status", isStateChange: true, displayed: true, value: 'offline', descriptionText: "$device.displayName is offline"]
     if (state.failedTries >= 2) {
-        if ( device.currentValue('status') != 'offline' || state.manualPress ) {
-           log.debug "${myMap}"
-           sendEvent(myMap)
-           state.manualPress = false
+        if (device.currentValue('status') != 'offline' || state.manualPress) {
+            log.debug "${myMap}"
+            sendEvent(myMap)
+            state.manualPress = false
         }
         log.info "Device is offline"
     }
