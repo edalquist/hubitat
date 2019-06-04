@@ -832,11 +832,11 @@ def refresh() {
 
   cmds << zwave.switchAllV1.switchAllGet().format()
 
-  // if (state.isIN) { // There are INPUT channels, so we must get channel levels using switchMultilevelGet:
+  // if (state.isIN) { // There are INPUT channels, so we must get channel levels using switchMultilevelGet: ch1 is the composite/average/all value
     (2..5).each { cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it).encapsulate(zwave.switchMultilevelV1.switchMultilevelGet()).format() }
   // }
   // else { // There are no INPUT channels, so we can use switchColorGet for greater accuracy:
-    (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it).format() }
+  //  (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it).format() }
   // }
 
   cmds << zwave.meterV3.meterGet(scale: 0).format() // Get energy MeterReport

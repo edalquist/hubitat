@@ -103,31 +103,34 @@ def updated() {
 def configure() {
     def commands = []
     if (loadType != null) {
-        commands.addAll(setLoadType(loadType))
+        commands << setLoadType(loadType)
     }
     if (indicatorStatus != null) {
-        commands.addAll(setIndicatorStatus(indicatorStatus))
+        commands << setIndicatorStatus(indicatorStatus)
     }
     if (presetLevel != null) {
-        commands.addAll(setPresetLevel(presetLevel as short))
+        commands << setPresetLevel(presetLevel )
     }
     if (minLevel != null) {
-        commands.addAll(setMinLevel(minLevel as short))
+        commands << setMinLevel(minLevel )
     }
     if (maxLevel != null) {
-        commands.addAll(setMaxLevel(maxLevel as short))
+        commands << setMaxLevel(maxLevel )
     }
     if (fadeOnTime != null) {
-        commands.addAll(setFadeOnTime(fadeOnTime as short))
+        commands << setFadeOnTime(fadeOnTime )
     }
     if (fadeOffTime != null) {
-        commands.addAll(setFadeOffTime(fadeOffTime as short))
+        commands << setFadeOffTime(fadeOffTime )
     }
     if (levelIndicatorTimeout != null) {
-        commands.addAll(setLevelIndicatorTimeout(levelIndicatorTimeout as short))
+        commands << setLevelIndicatorTimeout(levelIndicatorTimeout)
     }
+
+    commands = commands.flatten()
+    commands = delayBetween(commands, 500)// + refresh()).flatten()
     log.debug "Configuring with commands $commands"
-    commands
+    return commands
 }
 
 def parse(String description) {
@@ -146,8 +149,8 @@ def on() {
     def fadeOnTime = device.currentValue("fadeOnTime")
     def presetLevel = device.currentValue("presetLevel")
 
-    short duration = fadeOnTime == null ? 255 : fadeOnTime
-    short level = presetLevel == null || presetLevel == 0 ? 0xFF : toZwaveLevel(presetLevel as short)
+    duration = fadeOnTime == null ? 255 : fadeOnTime
+    level = presetLevel == null || presetLevel == 0 ? 0xFF : toZwaveLevel(presetLevel )
     delayBetween([
             zwave.switchMultilevelV2.switchMultilevelSet(value: level, dimmingDuration: duration).format(),
             zwave.switchMultilevelV1.switchMultilevelGet().format()
@@ -157,7 +160,7 @@ def on() {
 def off() {
     def fadeOffTime = device.currentValue("fadeOffTime")
 
-    short duration = fadeOffTime == null ? 255 : fadeOffTime
+    duration = fadeOffTime == null ? 255 : fadeOffTime
     delayBetween([
             zwave.switchMultilevelV2.switchMultilevelSet(value: 0x00, dimmingDuration: duration).format(),
             zwave.switchMultilevelV1.switchMultilevelGet().format()
@@ -166,8 +169,8 @@ def off() {
 
 def setLevel(value, durationSeconds = null) {
     log.debug "setLevel >> value: $value, durationSeconds: $durationSeconds"
-    short level = toDisplayLevel(value as short)
-    short dimmingDuration = durationSeconds == null ? 255 : secondsToDuration(durationSeconds as int)
+    level = toDisplayLevel(value )
+    dimmingDuration = durationSeconds == null ? 255 : secondsToDuration(durationSeconds as int)
 
     sendEvent(name: "level", value: level, unit: "%")
     sendEvent(name: "switch", value: level > 0 ? "on" : "off")
@@ -196,7 +199,7 @@ def refresh() {
         commands << zwave.configurationV1.configurationGet(parameterNumber: i).format()
     }
     log.debug "Refreshing with commands $commands"
-    delayBetween(commands, commandDelayMs)
+    delayBetween(commands, 500)
 }
 
 def indicatorNever() {
@@ -355,7 +358,7 @@ private zwaveEvent(hubitat.zwave.Command cmd) {
     log.warn "Unhandled zwave command $cmd"
 }
 
-private dimmerEvent(short level) {
+private dimmerEvent(level) {
     def result = null
     if (level == 0) {
         result = [createEvent(name: "level", value: 0, unit: "%"), switchEvent(false)]
@@ -388,16 +391,16 @@ private getStatusCommands() {
     cmds
 }
 
-private short toDisplayLevel(short level) {
+private toDisplayLevel(level) {
     level = Math.max(0, Math.min(100, level))
     (level == (short) 99) ? 100 : level
 }
 
-private short toZwaveLevel(short level) {
+private toZwaveLevel(level) {
     Math.max(0, Math.min(99, level))
 }
 
-private int durationToSeconds(short duration) {
+private int durationToSeconds(duration) {
     if (duration >= 0 && duration <= 127) {
         duration
     } else if (duration >= 128 && duration <= 254) {
@@ -410,7 +413,7 @@ private int durationToSeconds(short duration) {
     }
 }
 
-private short secondsToDuration(int seconds) {
+private secondsToDuration(int seconds) {
     if (seconds >= 0 && seconds <= 127) {
         seconds
     } else if (seconds >= 128 && seconds <= 127 * 60) {
@@ -421,41 +424,40 @@ private short secondsToDuration(int seconds) {
     }
 }
 
-private configurationCommand(param, value) {
-    param = param as short
-    value = value as short
-    delayBetween([
-            zwave.configurationV1.configurationSet(parameterNumber: param, configurationValue: [value]).format(),
-            zwave.configurationV1.configurationGet(parameterNumber: param).format()
-    ], commandDelayMs)
+private configurationCommand(parameterNumber, value, fieldSize = 1) {
+    if (fieldSize == null)  fieldSize = 1;
+    return [
+        zwave.configurationV1.configurationSet(scaledConfigurationValue: value, parameterNumber: parameterNumber, size: fieldSize).format(),
+        zwave.configurationV1.configurationGet(parameterNumber: parameterNumber).format()
+    ]
 }
 
-private setFadeOnTime(short time) {
+private setFadeOnTime(time) {
     sendEvent(name: "fadeOnTime", value: time)
     configurationCommand(1, time)
 }
 
-private setFadeOffTime(short time) {
+private setFadeOffTime(time) {
     sendEvent(name: "fadeOffTime", value: time)
     configurationCommand(2, time)
 }
 
-private setMinLevel(short level) {
+private setMinLevel(level) {
     sendEvent(name: "minLevel", value: level)
     configurationCommand(3, level)
 }
 
-private setMaxLevel(short level) {
+private setMaxLevel(level) {
     sendEvent(name: "maxLevel", value: level)
     configurationCommand(4, level)
 }
 
-private setPresetLevel(short level) {
+private setPresetLevel(level) {
     sendEvent(name: "presetLevel", value: level)
     configurationCommand(5, level)
 }
 
-private setLevelIndicatorTimeout(short timeout) {
+private setLevelIndicatorTimeout(timeout) {
     sendEvent(name: "levelIndicatorTimeout", value: timeout)
     configurationCommand(6, timeout)
 }
