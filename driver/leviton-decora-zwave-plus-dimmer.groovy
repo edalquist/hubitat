@@ -393,12 +393,12 @@ private getStatusCommands() {
 }
 
 private toDisplayLevel(level) {
-    level = Math.max(0, Math.min(100, level))
+    level = Math.max(0, Math.min(100, level.intValue()))
     (level == (short) 99) ? 100 : level
 }
 
 private toZwaveLevel(level) {
-    Math.max(0, Math.min(99, level))
+    Math.max(0, Math.min(99, level.intValue()))
 }
 
 private int durationToSeconds(duration) {
