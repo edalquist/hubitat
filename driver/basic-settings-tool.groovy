@@ -18,8 +18,10 @@ metadata {
         command "getAllSettings"
         command "getSetting", [[name: "settingName", type: "STRING", description: "Name of the setting to get"]]
         command "updateSetting", [
-                [name: "settingName", type: "STRING", description: "Name of the setting to get"],
-                [name: "settingValue", type: "STRING", description: "Value to set for the setting"]]
+            [name: "settingName", type: "STRING", description: "Name of the setting to get"],
+            [name: "settingValue", type: "STRING", description: "Value to set for the setting"],
+            [name: "settingType", type: "STRING", description: "Type of the setting value"]
+        ]
         command "clearSetting", [[name: "settingName", type: "STRING", description: "Name of the setting to clear"]]
         command "clearAllSettings"
         command "removeSetting", [[name: "settingName", type: "STRING", description: "Name of the setting to remove"]]
@@ -51,27 +53,16 @@ def getSetting(settingName = null) {
     log.debug "${settingName}: ${settings[settingName]}"
 }
 
-/**
- * Does not work, the new value is not persisted. A NPE is thrown if you attempt to update a setting
- * that is not declared as an input.
- *
- * see https://community.hubitat.com/t/bug-device-updatesetting-device-clearsetting-not-working/17366
- */
-def updateSetting(settingName = null, settingValue = null) {
-    log.debug "Replacing ${settingName}: '${settings[settingName]}' with '${settingValue}'"
+def updateSetting(settingName = null, settingValue = null, settingType = null) {
+    log.debug "Replacing ${settingName}: '${settings[settingName]}' with '${settingValue}' of type ${settingType}"
     try {
-        device.updateSetting(settingName, settingValue)
+        device.updateSetting(settingName, [value: settingValue, type: settingType])
     } catch (NullPointerException e) {
         log.error "Setting ${settingName} is not a valid setting: " + e
     }
     log.debug "Updated Settings: " + settings
 }
 
-/**
- * Does not work, settings get their value set to null, not the input default as documented.
- *
- * see https://community.hubitat.com/t/bug-device-updatesetting-device-clearsetting-not-working/17366
- */
 def clearAllSettings() {
     log.debug "before: " + settings
     // Copy keys set first to avoid any chance of concurrent modification
@@ -80,11 +71,6 @@ def clearAllSettings() {
     log.debug " after: " + settings
 }
 
-/**
- * Does not work, settings get their value set to null, not the input default as documented.
- *
- * see https://community.hubitat.com/t/bug-device-updatesetting-device-clearsetting-not-working/17366
- */
 def clearSetting(settingName = null) {
     log.debug "before: " + settings
     device.clearSetting(settingName)
