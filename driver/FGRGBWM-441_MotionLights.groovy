@@ -13,9 +13,35 @@
  **/
 import groovy.transform.Field
 
+@Field int VERSION = 1
+
 @Field List<String> LOG_LEVELS = ["warn", "info", "debug", "trace"]
 @Field String DEFAULT_LOG_LEVEL = LOG_LEVELS[1]
-@Field int VERSION = 1
+
+// hard-coded parameters, always set to the specified values
+@Field Map CONSTANT_PARAMETERS = [
+        // ALL ON / ALL OFF function activation: 0 - ALL ON inactive, ALL OFF inactive
+        1:[0],
+        // Associations command class choice: 0 - NORMAL (DIMMER) - BASIC SET/SWITCH_MULTILEVEL_-START/STOP
+        6:[0],
+        // Output state change mode: 0 - MODE1 (related parameters: 9-step value, 10-time between steps)
+        8:[0],
+        // Time for changing from start to end value: UNUSED DUE TO #8
+        11:[0],
+        // 38 & 39 are for alarm program, not used
+        38:[10],
+        39:intToUnsignedByteArray(1, 2),
+        // Command class reporting Outputs status change: reporting as a result of inputs and controllers actions (SWITCH MULTILEVEL)
+        42:[0],
+        // Reporting 0-10v analog inputs change threshold: 0.1V
+        43:[1],
+        // Response to BRIGHTNESS set to 0%: 0 - illumination colour set to white (all channels controlled together)
+        71:[0],
+        // Starting predefined program: UNUSED
+        72:[1],
+        // Triple click action: 0 - NODE INFO control frame is sent
+        73:[0]
+]
 
 metadata {
     definition(name: "Fibaro RGBW Controller (FGRGBWM-441) - Light & Motion", namespace: "edalquist", author: "Eric Dalquist") {
@@ -59,7 +85,7 @@ metadata {
 
         section { // Input/Output Assignments:
             input name: "dimUpInput", title: "The dim up momentary button",
-                    description: "<ul><li>[Default: IN1]",
+                    description: "[Default: IN1]",
                     displayDuringSetup: true, required: true,
                     type: "enum", defaultValue: 0,
                     options: [0: "Input 1",
@@ -68,7 +94,7 @@ metadata {
                               3: "Input 4"]
 
             input name: "dimDownInput", title: "The dim down momentary button",
-                    description: "<ul><li>[Default: IN2]",
+                    description: "[Default: IN2]",
                     displayDuringSetup: true, required: true,
                     type: "enum", defaultValue: 1,
                     options: [0: "Input 1",
@@ -77,7 +103,7 @@ metadata {
                               3: "Input 4"]
 
             input name: "motionInput", title: "The input attached to the motion sensor",
-                    description: "<ul><li>[Default: IN3]",
+                    description: "[Default: IN3]",
                     displayDuringSetup: true, required: true,
                     type: "enum", defaultValue: 2,
                     options: [0: "Input 1",
@@ -86,7 +112,7 @@ metadata {
                               3: "Input 4"]
 
             input name: "lightOutput", title: "The input attached to the motion sensor",
-                    description: "<ul><li>[Default: W]",
+                    description: "[Default: W]",
                     displayDuringSetup: true, required: true,
                     type: "enum", defaultValue: 3,
                     options: [0: "R",
@@ -97,53 +123,51 @@ metadata {
 
         section { // CHANNEL MAPPING & THRESHOLDS:
             input name: "dimUpThreshold", title: "Dim Up: Threshold to trigger.",
-                    description: "<ul><li>[Default 50%]",
+                    description: "[Default 50%]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 50, range: "1..99"
 
             input name: "dimDownThreshold", title: "Dim Down: Threshold to trigger.",
-                    description: "<ul><li>[Default 50%]",
+                    description: "[Default 50%]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 50, range: "1..99"
 
             input name: "motionThreshold", title: "Motion: Threshold to trigger.",
-                    description: "<ul><li>[Default 50%]",
+                    description: "[Default 50%]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 50, range: "1..99"
         }
 
         section { // PHYSICAL DEVICE PARAMETERS:
             input name: "configParam09", title: "#9: MODE1: Step value:",
-                    description: "Size of the step for each change in level during the transition." +
-                        "<ul><li>[Default: 1]",
+                    description: "[Default: 1]<br/>Size of the step for each change in level during the transition.",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 1, range: "1..255"
 
             input name: "configParam10", title: "#10: MODE1: Time between steps:",
-                    description: "Time between each step in a transition between levels. Setting this to zero means an instantaneous change." +
-                        "<ul><li>[Default: 10ms]",
+                    description: "[Default: 10ms]<br/>Time between each step in a transition between levels. Setting this to zero means an instantaneous change.",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 10, range: "0..60000"
 
             input name: "configParam12", title: "#12: Maximum brightening level:",
-                    description: "<ul><li>[Default: 255]",
+                    description: "[Default: 255]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 255, range: "3..255"
 
             input name: "configParam13", title: "#13: Minimum dim level:",
-                    description: "<ul><li>[Default: 2]",
+                    description: "[Default: 2]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 2, range: "0..254"
 
             input name: "configParam16", title: "#16: Memorise device status at power cut:",
-                    description: "<ul><li>[Default: 1: MEMORISE STATUS]",
+                    description: "[Default: 1: MEMORISE STATUS]",
                     displayDuringSetup: false, required: true,
                     type: "enum", defaultValue: 1,
                     options: [0: "0: DO NOT MEMORISE STATUS",
                               1: "1: MEMORISE STATUS"]
 
             input name: "configParam30",title: "#30: Response to ALARM of any type:",
-                    description: "<ul><li>[Default: 0: INACTIVE]",
+                    description: "[Default: 0: INACTIVE]",
                     displayDuringSetup: false, required: true,
                     type: "enum", defaultValue: 0,
                     options: [0: "0: INACTIVE - Device doesn't respond",
@@ -153,16 +177,16 @@ metadata {
             // "3": "3: ALARM PROGRAM - Alarm sequence turns on (Parameter #38)"
 
             input name: "configParam44", title: "#44: Power load reporting frequency:",
-                    description: "<ul><li>[Default: 30s]" +
-                        "<ul><li>0: reports are not sent" +
-                        "<li>1-65534: time between reports (s)",
+                    description: "[Default: 30s]" +
+                            "<ul><li>0: reports are not sent" +
+                            "<li>1-65534: time between reports (s)",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 30, range: "0..65534"
 
             input name: "configParam45", title: "#45: Reporting changes in energy:",
-                    description: "<ul><li>[Default: 10 = 0.1kWh]" +
-                        "<li>0: reports are not sent" +
-                        "<li>1-254: 0.01kWh - 2.54kWh",
+                    description: "[Default: 10 = 0.1kWh]" +
+                            "<ul><li>0: reports are not sent" +
+                            "<li>1-254: 0.01kWh - 2.54kWh",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 10, range: "0..254"
 
@@ -204,7 +228,7 @@ metadata {
  * @return commands to run in response to the device message
  */
 def parse(description) {
-    logger("debug", "parse(): raw message: ${description}")
+    logger("trace", "parse(): raw message: ${description}")
     if (description == "updated") {
         logger("error", "THIS IS STILL NEEDED ON HUBITAT")
         return null
@@ -213,7 +237,7 @@ def parse(description) {
     def result = null
     if (description != "updated") {
         def cmd = zwave.parse(description, getSupportedCommands())
-        logger("debug", "parse(): command: ${cmd}")
+        logger("trace", "parse(): command: ${cmd}")
         if (cmd) {
             result = zwaveEvent(cmd)
         } else {
@@ -244,6 +268,100 @@ def parse(description) {
     0x20: 1, // Basic Command Class (V1)
     0x7A: 2  // Firmware Update Meta Data (0x7A) : V2 - Not supported in Hubitat
 */
+
+
+/**
+ *  COMMAND_CLASS_CONFIGURATION (0x70) : ConfigurationReport
+ *
+ *  Configuration reports tell us the current parameter values stored in the physical device.
+ *
+ *  Due to platform security restrictions, the relevent preference value cannot be updated with the actual
+ *  value from the device, instead all we can do is output to the SmartThings IDE Log for verification.
+ **/
+def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
+    logger("debug", "zwaveEvent(): ConfigurationReport received: ${cmd}")
+    int paramNum = (int) cmd.parameterNumber
+    def settingName = String.format("configParam%02d", cmd.parameterNumber)
+
+    def expectedValue
+    if (cmd.parameterNumber == 14) {
+        expectedValue = getParameter14()
+    } else if (CONSTANT_PARAMETERS.containsKey(paramNum)) {
+        expectedValue = CONSTANT_PARAMETERS.get(paramNum)
+    } else {
+        expectedValue = settings.get(settingName)
+        if (expectedValue != null) {
+            expectedValue = intToUnsignedByteArray(expectedValue, cmd.size)
+        }
+    }
+
+    // TODO is this true for hubitat too?
+    // Translate cmd.configurationValue to an int. This should be returned from zwave.parse() as
+    // cmd.scaledConfigurationValue, but it hasn't been implemented by SmartThings yet! :/
+    //  See: https://community.smartthings.com/t/zwave-configurationv2-configurationreport-dev-question/9771
+    // def scaledConfigurationValue = byteArrayToInt(cmd.configurationValue)
+
+    if (expectedValue != cmd.configurationValue) {
+        logger("warn", "Parameter #${cmd.parameterNumber} has value: ${cmd.configurationValue} but should have value: ${expectedValue}")
+        logger("warn", "Reload the Device page and click Save Preferences")
+    } else {
+        logger("info", "Parameter #${cmd.parameterNumber} has expected value: ${cmd.configurationValue}")
+    }
+}
+
+/**
+ *  COMMAND_CLASS_ASSOCIATION (0x85) : AssociationReport
+ *
+ *  AssociationReports tell the nodes in an association group.
+ *  Due to platform security restrictions, the relevent preference value cannot be updated with the actual
+ *  value from the device, instead all we can do is output to the SmartThings IDE Log for verification.
+ *
+ *  Example: AssociationReport(groupingIdentifier: 4, maxNodesSupported: 5, nodeId: [1], reportsToFollow: 0)
+ **/
+def zwaveEvent(hubitat.zwave.commands.associationv2.AssociationReport cmd) {
+    logger("debug", "zwaveEvent(): AssociationReport received: ${cmd}")
+    logger("info", "Association Group ${cmd.groupingIdentifier} contains nodes: ${cmd.nodeId}")
+}
+
+/**
+ *  COMMAND_CLASS_MANUFACTURER_SPECIFIC (0x72) : ManufacturerSpecificReport
+ *
+ *  ManufacturerSpecific reports tell us the device's manufacturer ID and product ID.
+ **/
+def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv1.ManufacturerSpecificReport cmd) {
+    logger("debug", "zwaveEvent(): ManufacturerSpecificReport received: ${cmd}")
+    updateDataValue("manufacturerName", "${cmd.manufacturerName}")
+    updateDataValue("manufacturerId", "${cmd.manufacturerId}")
+    updateDataValue("productId", "${cmd.productId}")
+    updateDataValue("productTypeId", "${cmd.productTypeId}")
+}
+
+/**
+ *  COMMAND_CLASS_VERSION (0x86) : VersionReport
+ *
+ *  Version reports tell us the device's Z-Wave framework and firmware versions.
+ **/
+def zwaveEvent(hubitat.zwave.commands.versionv1.VersionReport cmd) {
+    logger("debug", "zwaveEvent(): VersionReport received: ${cmd}")
+    updateDataValue("applicationVersion", "${cmd.applicationVersion}")
+    updateDataValue("applicationSubVersion", "${cmd.applicationSubVersion}")
+    updateDataValue("zWaveLibraryType", "${cmd.zWaveLibraryType}")
+    updateDataValue("zWaveProtocolVersion", "${cmd.zWaveProtocolVersion}")
+    updateDataValue("zWaveProtocolSubVersion", "${cmd.zWaveProtocolSubVersion}")
+}
+
+/**
+ *  COMMAND_CLASS_FIRMWARE_UPDATE_MD (0x7A) : FirmwareMdReport
+ *
+ *  Firmware Meta Data reports tell us the device's firmware version and manufacturer ID.
+ *  TODO(edalquist) hubitat doesn't fully support this yet:
+ **/
+def zwaveEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
+    logger("debug", "zwaveEvent(): FirmwareMdReport received: ${cmd}")
+    if (cmd.checksum != null) updateDataValue("firmwareChecksum", "${cmd.checksum}")
+    if (cmd.firmwareId != null) updateDataValue("firmwareId", "${cmd.firmwareId}")
+    if (cmd.manufacturerId != null) updateDataValue("manufacturerId", "${cmd.manufacturerId}")
+}
 
 ///**
 // *  COMMAND_CLASS_BASIC (0x20) : BasicReport [IGNORED]
@@ -389,81 +507,6 @@ def parse(description) {
 //}
 //
 ///**
-// *  COMMAND_CLASS_CONFIGURATION (0x70) : ConfigurationReport
-// *
-// *  Configuration reports tell us the current parameter values stored in the physical device.
-// *
-// *  Due to platform security restrictions, the relevent preference value cannot be updated with the actual
-// *  value from the device, instead all we can do is output to the SmartThings IDE Log for verification.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
-//    logger("trace", "zwaveEvent(): ConfigurationReport received: ${cmd}")
-//    // TODO is this true for hubitat too?
-//    // Translate cmd.configurationValue to an int. This should be returned from zwave.parse() as
-//    // cmd.scaledConfigurationValue, but it hasn't been implemented by SmartThings yet! :/
-//    //  See: https://community.smartthings.com/t/zwave-configurationv2-configurationreport-dev-question/9771
-//    def scaledConfigurationValue = byteArrayToInt(cmd.configurationValue)
-//    logger("info", "Parameter #${cmd.parameterNumber} has value: ${cmd.configurationValue} (${scaledConfigurationValue})")
-//}
-//
-///**
-// *  COMMAND_CLASS_MANUFACTURER_SPECIFIC (0x72) : ManufacturerSpecificReport
-// *
-// *  ManufacturerSpecific reports tell us the device's manufacturer ID and product ID.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv1.ManufacturerSpecificReport cmd) {
-//    logger("trace", "zwaveEvent(): ManufacturerSpecificReport received: ${cmd}")
-//    updateDataValue("manufacturerName", "${cmd.manufacturerName}")
-//    updateDataValue("manufacturerId", "${cmd.manufacturerId}")
-//    updateDataValue("productId", "${cmd.productId}")
-//    updateDataValue("productTypeId", "${cmd.productTypeId}")
-//}
-//
-///**
-// *  COMMAND_CLASS_ASSOCIATION (0x85) : AssociationReport
-// *
-// *  AssociationReports tell the nodes in an association group.
-// *  Due to platform security restrictions, the relevent preference value cannot be updated with the actual
-// *  value from the device, instead all we can do is output to the SmartThings IDE Log for verification.
-// *
-// *  Example: AssociationReport(groupingIdentifier: 4, maxNodesSupported: 5, nodeId: [1], reportsToFollow: 0)
-// **/
-//def zwaveEvent(hubitat.zwave.commands.associationv2.AssociationReport cmd) {
-//    logger("trace", "zwaveEvent(): AssociationReport received: ${cmd}")
-//    logger("info", "Association Group ${cmd.groupingIdentifier} contains nodes: ${cmd.nodeId}")
-//}
-//
-///**
-// *  COMMAND_CLASS_VERSION (0x86) : VersionReport
-// *
-// *  Version reports tell us the device's Z-Wave framework and firmware versions.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.versionv1.VersionReport cmd) {
-//    logger("trace", "zwaveEvent(): VersionReport received: ${cmd}")
-//    updateDataValue("applicationVersion", "${cmd.applicationVersion}")
-//    updateDataValue("applicationSubVersion", "${cmd.applicationSubVersion}")
-//    updateDataValue("zWaveLibraryType", "${cmd.zWaveLibraryType}")
-//    updateDataValue("zWaveProtocolVersion", "${cmd.zWaveProtocolVersion}")
-//    updateDataValue("zWaveProtocolSubVersion", "${cmd.zWaveProtocolSubVersion}")
-//}
-//
-//// TODO(edalquist) hubitat doesn't fully support this yet:
-//// parse(): Parsing raw message: zw device: 03, command: 7A02, payload: 01 0F 20 09 00 00 , isMulticast: false
-//// zwaveEvent(): No handler for command: FirmwareMdReport(checksum:null, firmwareId:null, manufacturerId:null)
-////
-///**
-// *  COMMAND_CLASS_FIRMWARE_UPDATE_MD (0x7A) : FirmwareMdReport
-// *
-// *  Firmware Meta Data reports tell us the device's firmware version and manufacturer ID.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
-//    logger("trace", "zwaveEvent(): FirmwareMdReport received: ${cmd}")
-//    updateDataValue("firmwareChecksum", "${cmd.checksum}")
-//    updateDataValue("firmwareId", "${cmd.firmwareId}")
-//    updateDataValue("manufacturerId", "${cmd.manufacturerId}")
-//}
-//
-///**
 // *  Default zwaveEvent handler.
 // *
 // *  Called for all Z-Wave events that aren't handled above.
@@ -502,47 +545,15 @@ def configure() {
 
     def cmds = []
 
-    // Note: Parameters #10,#14,#39,#44 have size: 2!
-
-    // hard-coded parameters, always set to the specified values
-    // ALL ON / ALL OFF function activation: 0 - ALL ON inactive, ALL OFF inactive
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 1, size: 1, configurationValue: [0])
-    // Associations command class choice: 0 - NORMAL (DIMMER) - BASIC SET/SWITCH_MULTILEVEL_-START/STOP
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 6, size: 1, configurationValue: [0])
-    // Output state change mode: 0 - MODE1 (related parameters: 9-step value, 10-time between steps)
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 8, size: 1, configurationValue: [0])
-    // Time for changing from start to end value: UNUSED DUE TO #8
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 11, size: 1, configurationValue: [0])
-    // 38 & 39 are for alarm program, not used
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 38, size: 1, configurationValue: [10])
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 39, size: 2, configurationValue: intToUnsignedByteArray(1, 2))
-    // Command class reporting Outputs status change: reporting as a result of inputs and controllers actions (SWITCH MULTILEVEL)
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 42, size: 1, configurationValue: [0])
-    // Reporting 0-10v analog inputs change threshold: 0.1V
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 43, size: 1, configurationValue: [1])
-    // Response to BRIGHTNESS set to 0%: 0 - illumination colour set to white (all channels controlled together)
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 71, size: 1, configurationValue: [0])
-    // Starting predefined program: UNUSED
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 72, size: 1, configurationValue: [1])
-    // Triple click action: 0 - NODE INFO control frame is sent
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 73, size: 1, configurationValue: [0])
-
+    CONSTANT_PARAMETERS.each {key, val ->
+        cmds << zwave.configurationV1.configurationSet(parameterNumber: key, size: val.size(), configurationValue: val)
+    }
 
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 9, size: 1, configurationValue: [configParam09])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 10, size: 2, configurationValue: intToUnsignedByteArray(configParam10, 2))
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 12, size: 1, configurationValue: [configParam12])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 13, size: 1, configurationValue: [configParam13])
-
-    // Parameter #14 needs to be reconstituted from each 4-bit channel value. 3 of the channels are always 0-10V IN
-    // which is 8 (1000) so create an array of 8s then set whichever channel is the output to OUT 9 (1001)
-    def channels = [8, 8, 8, 8]
-    channels[lightOutput.toInteger()] = 9
-    def p14A = (channels[0] * 0x10) + channels[1]
-    def p14B = (channels[2] * 0x10) + channels[3]
-    logger("debug", "configure(): Setting Parameter #14 to: [${p14A},${p14B}] via ${channels}")
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 14, size: 2, configurationValue: [p14A, p14B])
-
-
+    cmds << zwave.configurationV1.configurationSet(parameterNumber: 14, size: 2, configurationValue: getParameter14())
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 16, size: 1, configurationValue: [configParam16])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 30, size: 1, configurationValue: [configParam30])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 44, size: 2, configurationValue: intToUnsignedByteArray(configParam44, 2))
@@ -577,11 +588,8 @@ def installed() {
     zwave event handlers update settings
      */
 
-//    state.debug = true
-//    state.installedAt = now()
-//    state.lastReset = new Date().format("YYYY/MM/dd \n HH:mm:ss", location.timeZone)
-//    state.channelThresholds = [null, 1, 1, 1, 1]
-//    state.channelModes = [null, 1, 1, 1, 1]
+    state.installedAt = now()
+    state.lastReset = new Date().format("YYYY/MM/dd \n HH:mm:ss", location.timeZone)
 //
 //    // Initialise attributes:
 //    sendEvent(name: "switch", value: "off", displayed: false)
@@ -594,11 +602,6 @@ def installed() {
 //    sendEvent(name: "energy", value: 0, unit: "kWh", displayed: false)
 //    sendEvent(name: "power", value: 0, unit: "W", displayed: false)
 //    sendEvent(name: "lastReset", value: state.lastReset, displayed: false)
-//
-//    (1..4).each { channel ->
-//        sendEvent(name: "switchCh${channel}", value: "off", displayed: false)
-//        sendEvent(name: "levelCh${channel}", value: 0, unit: "%", displayed: false)
-//    }
 //
     state.installVersion = VERSION
 }
@@ -616,8 +619,6 @@ def updated() {
         installed()
     }
 
-    // TODO verify a valid channel configuration (one thing assigned to each channel)
-
     def channelMap = [[], [], [], []]
     channelMap[dimUpInput.toInteger()] << "Dim Up Input"
     channelMap[dimDownInput.toInteger()] << "Dim Down Input"
@@ -628,40 +629,9 @@ def updated() {
     if (badChannel != null) {
         throw new IllegalStateException("Exactly one input or output may be assigned to each channel: ${channelMap}")
     }
-    return
 
-//        // Convert channel thresholds to a map:
-//        def cThresholds = []
-//        cThresholds[1] = configCh1Threshold
-//        cThresholds[2] = configCh2Threshold
-//        cThresholds[3] = configCh3Threshold
-//        cThresholds[4] = configCh4Threshold
-//        state.channelThresholds = cThresholds
-//
-//        // Convert channel modes to a map:
-//        def cModes = []
-//        cModes[1] = configParam14_1
-//        cModes[2] = configParam14_2
-//        cModes[3] = configParam14_3
-//        cModes[4] = configParam14_4
-//        state.channelModes = cModes
-//
-//        // Validate Paramter #14 settings:
-//        state.isRGBW = (state.channelModes[1] < 8) || (state.channelModes[2] < 8) || (state.channelModes[3] < 8) || (state.channelModes[4] < 8)
-//        state.isIN = (state.channelModes[1] == 8) || (state.channelModes[2] == 8) || (state.channelModes[3] == 8) || (state.channelModes[4] == 8)
-//        state.isOUT = (state.channelModes[1] > 8) || (state.channelModes[2] > 8) || (state.channelModes[3] > 8) || (state.channelModes[4] > 8)
-//        if (state.isRGBW & ((state.channelModes[1] != state.channelModes[2]) || (state.channelModes[1] != state.channelModes[3]) || (state.channelModes[1] != state.channelModes[4]))) {
-//            logger("warn", "updated(): Invalid combination of RGBW channels detected. All RGBW channels should be identical. You may get weird behaviour!")
-//        }
-//        if (state.isRGBW & (state.isIN || state.isOUT)) logger("warn", "updated(): Invalid combination of RGBW and IN/OUT channels detected. You may get weird behaviour!")
-//
-//        // Call configure() and refresh():
-//        cmds = configure() + refresh()
-//        logger("debug", "Sending update commands: ${cmds}")
-//        return cmds
-//    } else {
-//        logger("debug", "updated(): Ran within last 2 seconds so aborting.")
-//    }
+    // TODO may need more logic here as implementation goes along
+
     return configure()
 }
 
@@ -898,6 +868,21 @@ private getSupportedCommands() {
             0x20: 1, // Basic Command Class (V1)
             0x7A: 2  // Firmware Update Meta Data (0x7A) : V2 - Not supported in Hubitat
     ]
+}
+
+/**
+ * Parameter #14 needs to be reconstituted from each 4-bit channel value. 3 of the channels are always 0-10V IN
+ * which is 8 (1000) so create an array of 8s then set whichever channel is the output to OUT 9 (1001)
+ */
+private getParameter14() {
+    def channels = [8, 8, 8, 8]
+    channels[lightOutput.toInteger()] = 9
+    def param = [
+            (channels[0] * 0x10) + channels[1],
+            (channels[2] * 0x10) + channels[3]
+    ]
+    logger("debug", "Parameter #14 = ${param} via ${channels}")
+    return param
 }
 
 /**
