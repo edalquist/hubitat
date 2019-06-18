@@ -18,9 +18,9 @@ metadata {
         command "getAllSettings"
         command "getSetting", [[name: "settingName", type: "STRING", description: "Name of the setting to get"]]
         command "updateSetting", [
-            [name: "settingName", type: "STRING", description: "Name of the setting to get"],
-            [name: "settingValue", type: "STRING", description: "Value to set for the setting"],
-            [name: "settingType", type: "STRING", description: "Type of the setting value"]
+                [name: "settingName", type: "STRING", description: "Name of the setting to get"],
+                [name: "settingValue", type: "STRING", description: "Value to set for the setting"],
+                [name: "settingType", type: "STRING", description: "Type of the setting value"]
         ]
         command "clearSetting", [[name: "settingName", type: "STRING", description: "Name of the setting to clear"]]
         command "clearAllSettings"
@@ -63,9 +63,9 @@ def updateSetting(settingName = null, settingValue = null, settingType = null) {
     log.debug "Updated Settings: " + settings
 }
 
-/**	
+/**
  * Does not work, settings get their value set to null, not the input default as documented.	
- *	
+ *
  * see https://community.hubitat.com/t/bug-device-updatesetting-device-clearsetting-not-working/17366	
  */
 def clearAllSettings() {
@@ -76,9 +76,9 @@ def clearAllSettings() {
     log.debug " after: " + settings
 }
 
-/**	
+/**
  * Does not work, settings get their value set to null, not the input default as documented.	
- *	
+ *
  * see https://community.hubitat.com/t/bug-device-updatesetting-device-clearsetting-not-working/17366	
  */
 def clearSetting(settingName = null) {
