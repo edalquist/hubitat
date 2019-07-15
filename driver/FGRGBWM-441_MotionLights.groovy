@@ -650,14 +650,14 @@ def initialize() {
  *  on() - Turn the switch on. [Switch Capability]
  **/
 def on() {
-    def channel = lightOutput.toInteger() + 2 // channels are 1 based AND ch1 is the synthetic "all" channel
+    def channel = getOutputChannel()
     logger("info", "on(): Setting channel ${channel} switch to on.")
 
     def cmds = []
 
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         // TODO restore previous level?
-        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 99, dimmingDuration:1))
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 99, dimmingDuration: 1))
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
     
@@ -670,14 +670,14 @@ def on() {
  *  off() - Turn the switch off. [Switch Capability]
  **/
 def off() {
-    def channel = lightOutput.toInteger() + 2 // channels are 1 based AND ch1 is the synthetic "all" channel
+    def channel = getOutputChannel()
     logger("info", "off(): Setting channel ${channel} switch to off.")
 
     def cmds = []
 
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         // TODO save current level for restore?
-        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0, dimmingDuration:1))
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0, dimmingDuration: 1))
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
     
@@ -695,43 +695,20 @@ def off() {
  *  Only sends commands to RGBW/OUT channels to avoid altering the levels of INPUT channels.
  **/
 def setLevel(level, rate = 1) {
-    logger("trace", "setLevel(): Level: ${level}")
-    if (level > 100) level = 100
+    def channel = getOutputChannel()
     if (level < 0) level = 0
+    if (level > 100) level = 100
+    level = Math.round(level * 99 / 100).toInteger() // scale level for switchMultilevelSet.
+    logger("info", "setLevel(): Setting channel ${channel} switch to ${level}.")
 
     def cmds = []
+    sendEvent(name: "level", value: level)
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel)
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: level, dimmingDuration: 1))
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel)
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
 
-    if ("SCALE" == configLevelSetMode) { // SCALE Mode:
-        float currentMaxOutLevel = 0.0
-        (1..4).each { i ->
-            if (8 != state.channelModes[i]) {
-                currentMaxOutLevel = Math.max(currentMaxOutLevel, device.latestValue("levelCh${i}").toInteger())
-            }
-        }
-
-        if (0.0 == currentMaxOutLevel) { // All OUT levels are currently zero, so just set all to the new level:
-            (1..4).each { i ->
-                if (8 != state.channelModes[i]) {
-                    cmds << setLevelChX(level.toInteger(), i)
-                }
-            }
-        } else { // Scale the individual channel levels:
-            float s = level / currentMaxOutLevel
-            (1..4).each { i ->
-                if (8 != state.channelModes[i]) {
-                    cmds << setLevelChX((device.latestValue("levelCh${i}") * s).toInteger(), i)
-                }
-            }
-        }
-    } else { // SIMPLE Mode:
-        (1..4).each { i ->
-            if (8 != state.channelModes[i]) {
-                cmds << setLevelChX(level.toInteger(), i)
-            }
-        }
-    }
-
-    return cmds.flatten()
+    return formatForSend(delayBetween(cmds))
 }
 
 /**
@@ -791,6 +768,13 @@ def reset() {
 /**********************************************************************
  *  Private Helper Methods:
  **********************************************************************/
+
+/**
+ * Channel numbers start at 2 because ch1 is the "all" channel and "set" commands are 1 indexed                
+ */
+private getOutputChannel() {
+    return lightOutput.toInteger() + 2;
+}
 
 /**
  * @param level Level to log at, see LOG_LEVELS for options
@@ -1084,35 +1068,6 @@ private offChX(channel) {
     return cmds
 }
 
-/**
- *  setLevelChX() - Set level of an individual channel.
- *
- *  If channel is an INPUT channel, don't issue command. Log warning instead.
- *
- *  The Fibaro RGBW Controller does not support dimmingDuration. Instead,
- *  dimming durations are configured using device parameters (8/9/10/11).
- *
- **/
-private setLevelChX(level, channel) {
-    logger("info", "setLevelChX(): Setting channel ${channel} to level: ${level}.")
-
-    def cmds = []
-    if (channel > 4 || channel < 1) {
-        logger("warn", "setLevelChX(): Channel ${channel} does not exist!")
-    } else if (8 == state.channelModes[channel]) {
-        logger("warn", "setLevelChX(): Channel ${channel} is an INPUT channel. Command not sent.")
-    } else {
-        if (level < 0) level = 0
-        if (level > 100) level = 100
-        level = Math.round(level * 99 / 100) // scale level for switchMultilevelSet.
-        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1)).encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: level.toInteger()))
-        // Endpoint = channel + 1
-        sendEvent(name: "savedLevelCh${channel}", value: null) // Wipe savedLevel.
-        sendEvent(name: "activeProgram", value: 0) // Wipe activeProgram.
-    }
-
-    return cmds
-}
 
 /**********************************************************************
  *  Testing Commands:
