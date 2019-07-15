@@ -82,7 +82,7 @@ metadata {
                     type: "enum", defaultValue: DEFAULT_LOG_LEVEL,
                     options: LOG_LEVELS
         }
-
+        // dimUpInput, dimDownInput, motionInput, lightOutput
         section { // Input/Output Assignments:
             input name: "dimUpInput", title: "The dim up momentary button",
                     description: "[Default: IN1]",
@@ -111,7 +111,7 @@ metadata {
                               2: "Input 3",
                               3: "Input 4"]
 
-            input name: "lightOutput", title: "The input attached to the motion sensor",
+            input name: "lightOutput", title: "The output attached to the lights",
                     description: "[Default: W]",
                     displayDuringSetup: true, required: true,
                     type: "enum", defaultValue: 3,
@@ -271,6 +271,24 @@ def parse(description) {
 
 
 /**
+ *  COMMAND_CLASS_MULTICHANNEL (0x60) : MultiChannelCmdEncap
+ *
+ *  The MultiChannel Command Class is used to address one or more endpoints in a multi-channel device.
+ *  The sourceEndPoint attribute will identify the sub-device/channel the command relates to.
+ *  The encpsulated command is extracted and passed to the appropriate zwaveEvent handler.
+ **/
+def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
+    logger("trace", "zwaveEvent(): MultiChannelCmdEncap received: ${cmd}")
+
+    def encapsulatedCommand = cmd.encapsulatedCommand(getSupportedCommands())
+    if (!encapsulatedCommand) {
+        logger("warn", "zwaveEvent(): MultiChannelCmdEncap from endPoint ${cmd.sourceEndPoint} could not be translated: ${cmd}")
+    } else {
+        return zwaveEvent(encapsulatedCommand, cmd.sourceEndPoint)
+    }
+}
+
+/**
  *  COMMAND_CLASS_CONFIGURATION (0x70) : ConfigurationReport
  *
  *  Configuration reports tell us the current parameter values stored in the physical device.
@@ -363,114 +381,114 @@ def zwaveEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
     if (cmd.manufacturerId != null) updateDataValue("manufacturerId", "${cmd.manufacturerId}")
 }
 
-///**
-// *  COMMAND_CLASS_BASIC (0x20) : BasicReport [IGNORED]
-// *  https://graph.api.smartthings.com/ide/doc/zwave-utils.html#basicV1
-// *
-// *  Short   value   0xFF for on, 0x00 for off
-// **/
-//def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
-//    logger("trace", "zwaveEvent(): BasicReport received: ${cmd} (ignored)")
-//    // BasicReports are ignored as the aggregate switch and level attributes are calculated seperately.
-//}
-//
-///**
-// *  COMMAND_CLASS_SWITCH_MULTILEVEL (0x26) : SwitchMultilevelReport
-// *
-// *  SwitchMultilevelReports tell us the current level of a channel.
-// *
-// *  These reports will arrive via a MultiChannelCmdEncap command, the zwaveEvent(...MultiChannelCmdEncap) handler
-// *  will add the correct sourceEndPoint, before passing to this event handler.
-// *
-// *  Fibaro RGBW SwitchMultilevelReports have value in range [0..99], so this is scaled to 255 and passed to
-// *  zwaveEndPointEvent().
-// *
-// *  Short       value       0x00 for off, other values are level (on).
-// **/
-//def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd, sourceEndPoint = 0) {
-//    logger("trace", "zwaveEvent(): SwitchMultilevelReport received from endPoint ${sourceEndPoint}: ${cmd}")
+/**
+ *  COMMAND_CLASS_SWITCH_ALL (0x27) : * [IGNORED]
+ *
+ *  SwitchAll functionality is controlled and reported via device Parameter #1 instead.
+ **/
+def zwaveEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
+    logger("trace", "zwaveEvent(): SwitchAllReport received: ${cmd}")
+}
+
+/**
+ *  COMMAND_CLASS_METER_V3 (0x32) : MeterReport
+ *
+ *  The Fibaro RGBW Controller supports scale 0 (energy), and 2 (power) only.
+ *
+ *  Integer         deltaTime                   Time in seconds since last report
+ *  Short           meterType                   Unknown = 0, Electric = 1, Gas = 2, Water = 3
+ *  List<Short>     meterValue                  Meter value as an array of bytes
+ *  Short           precision                   The decimal precision of the values
+ *  List<Short>     previousMeterValue          Previous meter value as an array of bytes
+ *  Double          scaledPreviousMeterValue    Previous meter value as a double
+ *  Short           rateType                    ???
+ *  Short           scale                       The scale of the values: "kWh"=0, "kVAh"=1, "Watts"=2, "pulses"=3,
+ *                                              "Volts"=4, "Amps"=5, "Power Factor"=6, "Unknown"=7
+ *  Double          scaledMeterValue            Meter value as a double
+ *  Short           size                        The size of the array for the meterValue and previousMeterValue
+ *  List<Short>     payload                     ???
+ **/
+def zwaveEvent(hubitat.zwave.commands.meterv2.MeterReport cmd) {
+    logger("trace", "zwaveEvent(): MeterReport received: ${cmd}")
+
+    if (cmd.scale == 0) { // Accumulated Energy (kWh):
+        state.energy = cmd.scaledMeterValue
+        //sendEvent(name: "dispEnergy", value: String.format("%.2f",cmd.scaledMeterValue as BigDecimal) + " kWh", displayed: false)
+        logger("info", "Accumulated energy is ${cmd.scaledMeterValue} kWh")
+        return createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
+    } else if (cmd.scale == 1) { // Accumulated Energy (kVAh): Ignore.
+        //createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kVAh")
+    } else if (cmd.scale == 2) { // Instantaneous Power (Watts):
+        //sendEvent(name: "dispPower", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " W", displayed: false)
+        logger("info", "Power is ${cmd.scaledMeterValue} W")
+        return createEvent(name: "power", value: cmd.scaledMeterValue, unit: "W")
+    } else if (cmd.scale == 4) { // Instantaneous Voltage (Volts):
+        //sendEvent(name: "dispVoltage", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " V", displayed: false)
+        logger("info", "Voltage is ${cmd.scaledMeterValue} V")
+        return createEvent(name: "voltage", value: cmd.scaledMeterValue, unit: "V")
+    } else if (cmd.scale == 5) {  // Instantaneous Current (Amps):
+        //sendEvent(name: "dispCurrent", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " A", displayed: false)
+        logger("info", "Current is ${cmd.scaledMeterValue} A")
+        return createEvent(name: "current", value: cmd.scaledMeterValue, unit: "A")
+    } else if (cmd.scale == 6) { // Instantaneous Power Factor:
+        //sendEvent(name: "dispPowerFactor", value: "PF: " + String.format("%.2f",cmd.scaledMeterValue as BigDecimal), displayed: false)
+        logger("info", "PowerFactor is ${cmd.scaledMeterValue}")
+        return createEvent(name: "powerFactor", value: cmd.scaledMeterValue, unit: "PF")
+    }
+}
+
+/**
+ *  COMMAND_CLASS_BASIC (0x20) : BasicReport [IGNORED]
+ *  https://graph.api.smartthings.com/ide/doc/zwave-utils.html#basicV1
+ *
+ *  Short   value   0xFF for on, 0x00 for off
+ **/
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
+    logger("trace", "zwaveEvent(): BasicReport received: ${cmd} (ignored)")
+    // BasicReports are ignored as the aggregate switch and level attributes are calculated seperately.
+}
+
+/**
+ *  COMMAND_CLASS_SWITCH_MULTILEVEL (0x26) : SwitchMultilevelReport
+ *
+ *  SwitchMultilevelReports tell us the current level of a channel.
+ *
+ *  These reports will arrive via a MultiChannelCmdEncap command, the zwaveEvent(...MultiChannelCmdEncap) handler
+ *  will add the correct sourceEndPoint, before passing to this event handler.
+ *
+ *  Fibaro RGBW SwitchMultilevelReports have value in range [0..99], so this is scaled to 255 and passed to
+ *  zwaveEndPointEvent().
+ *
+ *  Short       value       0x00 for off, other values are level (on).
+ **/
+def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelReport cmd, sourceEndPoint = 0) {
+    logger("trace", "zwaveEvent(): SwitchMultilevelReport received from endPoint ${sourceEndPoint}: ${cmd}")
 //    return zwaveEndPointEvent(sourceEndPoint, Math.round(cmd.value * 255 / 99))
-//}
-//
-//def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelStartLevelChange cmd) {
+}
+
+//def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStartLevelChange cmd) {
 //    logger("trace", "zwaveEvent(): SwitchMultilevelStartLevelChange received: ${cmd}")
 //}
 //
-//def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelStopLevelChange cmd) {
+//def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStopLevelChange cmd) {
 //    logger("trace", "zwaveEvent(): SwitchMultilevelStopLevelChange received: ${cmd}")
 //}
 //
-///**
-// *  COMMAND_CLASS_SWITCH_ALL (0x27) : * [IGNORED]
-// *
-// *  SwitchAll functionality is controlled and reported via device Parameter #1 instead.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
-//    logger("trace", "zwaveEvent(): SwitchAllReport received: ${cmd}")
-//}
-//
-///**
-// *  COMMAND_CLASS_SENSOR_MULTILEVEL (0x31) : SensorMultilevelReport
-// *
-// *  Appears to be used to report power. Not sure if anything else...?
-// **/
-//def zwaveEvent(hubitat.zwave.commands.sensormultilevelv2.SensorMultilevelReport cmd) {
-//    logger("trace", "zwaveEvent(): SensorMultilevelReport received: ${cmd}")
-//
-//    if (cmd.sensorType == 4 /*SENSOR_TYPE_POWER_VERSION_2*/) { // Instantaneous Power (Watts):
-//        logger("info", "Power is ${cmd.scaledSensorValue} W")
+/**
+ *  COMMAND_CLASS_SENSOR_MULTILEVEL (0x31) : SensorMultilevelReport
+ *
+ *  Appears to be used to report power. Not sure if anything else...?
+ **/
+def zwaveEvent(hubitat.zwave.commands.sensormultilevelv2.SensorMultilevelReport cmd) {
+    logger("trace", "zwaveEvent(): SensorMultilevelReport received: ${cmd}")
+
+    if (cmd.sensorType == 4 /*SENSOR_TYPE_POWER_VERSION_2*/) { // Instantaneous Power (Watts):
+        logger("info", "Power is ${cmd.scaledSensorValue} W")
 //        return createEvent(name: "power", value: cmd.scaledSensorValue, unit: "W")
-//    } else {
-//        logger("warn", "zwaveEvent(): SensorMultilevelReport with unhandled sensorType: ${cmd}")
-//    }
-//}
-//
-///**
-// *  COMMAND_CLASS_METER_V3 (0x32) : MeterReport
-// *
-// *  The Fibaro RGBW Controller supports scale 0 (energy), and 2 (power) only.
-// *
-// *  Integer         deltaTime                   Time in seconds since last report
-// *  Short           meterType                   Unknown = 0, Electric = 1, Gas = 2, Water = 3
-// *  List<Short>     meterValue                  Meter value as an array of bytes
-// *  Short           precision                   The decimal precision of the values
-// *  List<Short>     previousMeterValue          Previous meter value as an array of bytes
-// *  Double          scaledPreviousMeterValue    Previous meter value as a double
-// *  Short           rateType                    ???
-// *  Short           scale                       The scale of the values: "kWh"=0, "kVAh"=1, "Watts"=2, "pulses"=3,
-// *                                              "Volts"=4, "Amps"=5, "Power Factor"=6, "Unknown"=7
-// *  Double          scaledMeterValue            Meter value as a double
-// *  Short           size                        The size of the array for the meterValue and previousMeterValue
-// *  List<Short>     payload                     ???
-// **/
-//def zwaveEvent(hubitat.zwave.commands.meterv2.MeterReport cmd) {
-//    logger("trace", "zwaveEvent(): MeterReport received: ${cmd}")
-//
-//    if (cmd.scale == 0) { // Accumulated Energy (kWh):
-//        state.energy = cmd.scaledMeterValue
-//        //sendEvent(name: "dispEnergy", value: String.format("%.2f",cmd.scaledMeterValue as BigDecimal) + " kWh", displayed: false)
-//        logger("info", "Accumulated energy is ${cmd.scaledMeterValue} kWh")
-//        return createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
-//    } else if (cmd.scale == 1) { // Accumulated Energy (kVAh): Ignore.
-//        //createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kVAh")
-//    } else if (cmd.scale == 2) { // Instantaneous Power (Watts):
-//        //sendEvent(name: "dispPower", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " W", displayed: false)
-//        logger("info", "Power is ${cmd.scaledMeterValue} W")
-//        return createEvent(name: "power", value: cmd.scaledMeterValue, unit: "W")
-//    } else if (cmd.scale == 4) { // Instantaneous Voltage (Volts):
-//        //sendEvent(name: "dispVoltage", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " V", displayed: false)
-//        logger("info", "Voltage is ${cmd.scaledMeterValue} V")
-//        return createEvent(name: "voltage", value: cmd.scaledMeterValue, unit: "V")
-//    } else if (cmd.scale == 5) {  // Instantaneous Current (Amps):
-//        //sendEvent(name: "dispCurrent", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " A", displayed: false)
-//        logger("info", "Current is ${cmd.scaledMeterValue} A")
-//        return createEvent(name: "current", value: cmd.scaledMeterValue, unit: "A")
-//    } else if (cmd.scale == 6) { // Instantaneous Power Factor:
-//        //sendEvent(name: "dispPowerFactor", value: "PF: " + String.format("%.2f",cmd.scaledMeterValue as BigDecimal), displayed: false)
-//        logger("info", "PowerFactor is ${cmd.scaledMeterValue}")
-//        return createEvent(name: "powerFactor", value: cmd.scaledMeterValue, unit: "PF")
-//    }
-//}
+    } else {
+        logger("warn", "zwaveEvent(): SensorMultilevelReport with unhandled sensorType: ${cmd}")
+    }
+}
 //
 //// /**
 ////  *  COMMAND_CLASS_SWITCH_COLOR (0x33) : SwitchColorReport
@@ -487,24 +505,6 @@ def zwaveEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
 ////     if (cmd.colorComponentId == 0) { cmd.colorComponentId = 5 } // Remap warmWhite colorComponentId
 ////     return zwaveEndPointEvent(cmd.colorComponentId, cmd.value)
 //// }
-//
-///**
-// *  COMMAND_CLASS_MULTICHANNEL (0x60) : MultiChannelCmdEncap
-// *
-// *  The MultiChannel Command Class is used to address one or more endpoints in a multi-channel device.
-// *  The sourceEndPoint attribute will identify the sub-device/channel the command relates to.
-// *  The encpsulated command is extracted and passed to the appropriate zwaveEvent handler.
-// **/
-//def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-//    logger("trace", "zwaveEvent(): MultiChannelCmdEncap received: ${cmd}")
-//
-//    def encapsulatedCommand = cmd.encapsulatedCommand(getSupportedCommands())
-//    if (!encapsulatedCommand) {
-//        logger("warn", "zwaveEvent(): MultiChannelCmdEncap from endPoint ${cmd.sourceEndPoint} could not be translated: ${cmd}")
-//    } else {
-//        return zwaveEvent(encapsulatedCommand, cmd.sourceEndPoint)
-//    }
-//}
 //
 ///**
 // *  Default zwaveEvent handler.
@@ -573,7 +573,7 @@ def configure() {
     cmds << zwave.associationV2.associationSet(groupingIdentifier: 5, nodeId: [zwaveHubNodeId])
 
     logger("warn", "configure(): Device Parameters are being updated. It is recommended to power-cycle the Fibaro device once completed.")
-    return formatForSend(delayBetween(cmds)) + getConfigReport()
+    return formatForSend(delayBetween(cmds, 500)) + getConfigReport()
 }
 
 /**
@@ -648,39 +648,42 @@ def initialize() {
 
 /**
  *  on() - Turn the switch on. [Switch Capability]
- *
- *  Only sends commands to RGBW/OUT channels to avoid altering the levels of INPUT channels.
  **/
 def on() {
-    logger("info", "on()")
+    def channel = lightOutput.toInteger() + 2 // channels are 1 based AND ch1 is the synthetic "all" channel
+    logger("info", "on(): Setting channel ${channel} switch to on.")
 
     def cmds = []
 
-    (1..4).each { channel ->
-        if (8 != state.channelModes[channel]) {
-            cmds << onChX(channel)
-        }
-    }
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
+        // TODO restore previous level?
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 99, dimmingDuration:1))
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
+    
+    sendEvent(name: "switch", value: "on")
 
-    return cmds.flatten()
+    return formatForSend(delayBetween(cmds))
 }
 
 /**
  *  off() - Turn the switch off. [Switch Capability]
- *
- *  Only sends commands to RGBW/OUT channels to avoid altering the levels of INPUT channels.
  **/
 def off() {
-    logger("info", "off()")
+    def channel = lightOutput.toInteger() + 2 // channels are 1 based AND ch1 is the synthetic "all" channel
+    logger("info", "off(): Setting channel ${channel} switch to off.")
 
     def cmds = []
-    (1..4).each { i ->
-        if (8 != state.channelModes[i]) {
-            cmds << offChX(i)
-        }
-    }
 
-    return cmds.flatten()
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
+        // TODO save current level for restore?
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0, dimmingDuration:1))
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
+    
+    sendEvent(name: "switch", value: "off")
+
+    return formatForSend(delayBetween(cmds))
 }
 
 /**
@@ -750,18 +753,20 @@ def refresh() {
 
     cmds << zwave.switchAllV1.switchAllGet()
 
-    // if (state.isIN) { // There are INPUT channels, so we must get channel levels using switchMultilevelGet: ch1 is the composite/average/all value
+    // dimUpInput, dimDownInput, motionInput, lightOutput
+
+    // INPUT channels are 2..5, ch1 is the average of 2..5
     (2..5).each {
-        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it).encapsulate(zwave.switchMultilevelV1.switchMultilevelGet())
+        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it).encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
     }
-    // }
     // else { // There are no INPUT channels, so we can use switchColorGet for greater accuracy:
-    //  (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it) }
+      (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it) }
     // }
 
     cmds << zwave.meterV3.meterGet(scale: 0) // Get energy MeterReport
     cmds << zwave.meterV3.meterGet(scale: 2) // Get power MeterReport
-    delayBetween(cmds, 200)
+
+    return formatForSend(delayBetween(cmds, 200))
 }
 
 /**********************************************************************
@@ -807,13 +812,18 @@ private logger(level, msg) {
  */
 private formatForSend(cmds) {
     logger("trace", "formatForSend:\n\t" + cmds.join("\n\t"))
-    return cmds.flatten().collect {
+    out = cmds.flatten().collect {
         try {
             return it.format()
         } catch (org.codehaus.groovy.runtime.metaclass.MethodSelectionException e) {
+            if (!e.toString().contains("java.lang.String#")) {
+                logger("warn", "format failed: ${e}")
+            }
             return it
         }
     }
+    logger("trace", "formatForSend:\n\t" + out.join("\n\t"))
+    return out
 }
 
 /**
@@ -854,16 +864,16 @@ private parseAssocGroup(string, maxNodes) {
  **/
 private getSupportedCommands() {
     return [
-            0x33: 1, // Color Control Command Class (V1)
+            0x33: 3, // Color Control Command Class (V3)
             0x85: 2, // Association Command Class (V2)
             0x86: 1, // Version Command Class (V1)
             0x31: 2, // Sensor Multilevel Command Class (V2)
-            0x32: 2, // Meter Command Class (V2)
-            0x70: 1, // Configuration Command Class (V1)
+            0x32: 3, // Meter Command Class (V3)
+            0x70: 2, // Configuration Command Class (V2)
             0x60: 3, // Multi Channel Command Class (V3)
-            0x26: 1, // Switch Multilevel Command Class (V1)
+            0x26: 2, // Switch Multilevel Command Class (V2)
             0x86: 1, // Version Command Class (V1)
-            0x72: 1, // Manufacturer Specific Command Class (V1)
+            0x72: 2, // Manufacturer Specific Command Class (V2)
             0x27: 1, // Switch All Command Class (V1)
             0x20: 1, // Basic Command Class (V1)
             0x7A: 2  // Firmware Update Meta Data (0x7A) : V2 - Not supported in Hubitat
@@ -1027,7 +1037,7 @@ private onChX(channel) {
     } else if (8 == state.channelModes[channel]) {
         logger("warn", "onX(): Channel ${channel} is an INPUT channel. Command not sent.")
         cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1))
-                .encapsulate(zwave.switchMultilevelV1.switchMultilevelGet()) // Endpoint = channel + 1
+                .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet()) // Endpoint = channel + 1
     } else {
         def newLevel = device.latestValue("savedLevelCh${channel}") ?: 100
         newLevel = (0 == newLevel.toInteger()) ? 99 : Math.round(newLevel.toInteger() * 99 / 100)
@@ -1035,7 +1045,7 @@ private onChX(channel) {
         logger("info", "onX(): Channel ${channel} to: ${newLevel}")
 
         cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1))
-                .encapsulate(zwave.switchMultilevelV1.switchMultilevelSet(value: newLevel.toInteger()))
+                .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: newLevel.toInteger()))
         // Endpoint = channel + 1
         sendEvent(name: "savedLevelCh${channel}", value: null) // Wipe savedLevel.
         sendEvent(name: "activeProgram", value: 0) // Wipe activeProgram.
@@ -1060,14 +1070,14 @@ private offChX(channel) {
     } else if (8 == state.channelModes[channel]) {
         logger("warn", "offX(): Channel ${channel} is an INPUT channel. Command not sent.")
         cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1))
-                .encapsulate(zwave.switchMultilevelV1.switchMultilevelGet()) // endPoint = channel + 1
+                .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet()) // endPoint = channel + 1
     } else {
         sendEvent(name: "savedLevelCh${channel}", value: device.latestValue("levelCh${channel}").toInteger())
         // Save level to 'hidden' attribute.
         sendEvent(name: "activeProgram", value: 0) // Wipe activeProgram.
         logger("info", "onX(): Channel ${channel} to: 0")
         cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1))
-                .encapsulate(zwave.switchMultilevelV1.switchMultilevelSet(value: 0)) // endPoint = channel + 1
+                .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0)) // endPoint = channel + 1
     }
 
     logger("trace", "Running " + cmds.size() + " commands: " + cmds)
@@ -1095,7 +1105,7 @@ private setLevelChX(level, channel) {
         if (level < 0) level = 0
         if (level > 100) level = 100
         level = Math.round(level * 99 / 100) // scale level for switchMultilevelSet.
-        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1)).encapsulate(zwave.switchMultilevelV1.switchMultilevelSet(value: level.toInteger()))
+        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: (channel + 1)).encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: level.toInteger()))
         // Endpoint = channel + 1
         sendEvent(name: "savedLevelCh${channel}", value: null) // Wipe savedLevel.
         sendEvent(name: "activeProgram", value: 0) // Wipe activeProgram.
@@ -1150,5 +1160,5 @@ def getConfigReport() {
     cmds << zwave.versionV1.versionGet()
     cmds << zwave.firmwareUpdateMdV2.firmwareMdGet()
 
-    return formatForSend(delayBetween(cmds))
+    return formatForSend(delayBetween(cmds, 500))
 }
