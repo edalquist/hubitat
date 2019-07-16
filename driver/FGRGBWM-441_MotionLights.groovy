@@ -246,13 +246,16 @@ def parse(description) {
     }
 
     logger("trace", "parse(): result: ${result}")
-    
+
     // Convert commands into a HubMultiAction, not sure why it has to work this way vs just returning cmds
+    /*
     if (result != null) {
         action = new hubitat.device.HubMultiAction()
         result.each{cmd -> action.add(cmd)}
         return action
     }
+    */
+    return result
 }
 
 
@@ -401,25 +404,25 @@ def zwaveEvent(hubitat.zwave.commands.meterv2.MeterReport cmd) {
         state.energy = cmd.scaledMeterValue
         //sendEvent(name: "dispEnergy", value: String.format("%.2f",cmd.scaledMeterValue as BigDecimal) + " kWh", displayed: false)
         logger("info", "Accumulated energy is ${cmd.scaledMeterValue} kWh")
-        return createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
+        sendEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
     } else if (cmd.scale == 1) { // Accumulated Energy (kVAh): Ignore.
         //createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kVAh")
     } else if (cmd.scale == 2) { // Instantaneous Power (Watts):
         //sendEvent(name: "dispPower", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " W", displayed: false)
         logger("info", "Power is ${cmd.scaledMeterValue} W")
-        return createEvent(name: "power", value: cmd.scaledMeterValue, unit: "W")
+        sendEvent(name: "power", value: cmd.scaledMeterValue, unit: "W")
     } else if (cmd.scale == 4) { // Instantaneous Voltage (Volts):
         //sendEvent(name: "dispVoltage", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " V", displayed: false)
         logger("info", "Voltage is ${cmd.scaledMeterValue} V")
-        return createEvent(name: "voltage", value: cmd.scaledMeterValue, unit: "V")
+        sendEvent(name: "voltage", value: cmd.scaledMeterValue, unit: "V")
     } else if (cmd.scale == 5) {  // Instantaneous Current (Amps):
         //sendEvent(name: "dispCurrent", value: String.format("%.1f",cmd.scaledMeterValue as BigDecimal) + " A", displayed: false)
         logger("info", "Current is ${cmd.scaledMeterValue} A")
-        return createEvent(name: "current", value: cmd.scaledMeterValue, unit: "A")
+        sendEvent(name: "current", value: cmd.scaledMeterValue, unit: "A")
     } else if (cmd.scale == 6) { // Instantaneous Power Factor:
         //sendEvent(name: "dispPowerFactor", value: "PF: " + String.format("%.2f",cmd.scaledMeterValue as BigDecimal), displayed: false)
         logger("info", "PowerFactor is ${cmd.scaledMeterValue}")
-        return createEvent(name: "powerFactor", value: cmd.scaledMeterValue, unit: "PF")
+        sendEvent(name: "powerFactor", value: cmd.scaledMeterValue, unit: "PF")
     }
 }
 
@@ -646,7 +649,7 @@ def on() {
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 99, dimmingDuration: 1))
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
-    
+
     sendEvent(name: "switch", value: "on")
 
     return formatForSend(delayBetween(cmds))
@@ -666,7 +669,7 @@ def off() {
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0, dimmingDuration: 1))
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
-    
+
     sendEvent(name: "switch", value: "off")
 
     return formatForSend(delayBetween(cmds))
@@ -692,7 +695,7 @@ def setLevel(level, rate = 1) {
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: level, dimmingDuration: 1))
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel)
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
-    
+
     sendEvent(name: "level", value: level, unit: "%")
 
     return formatForSend(delayBetween(cmds))
@@ -757,7 +760,7 @@ def reset() {
  **********************************************************************/
 
 /**
- * Channel numbers start at 2 because ch1 is the "all" channel and "set" commands are 1 indexed                
+ * Channel numbers start at 2 because ch1 is the "all" channel and "set" commands are 1 indexed
  */
 private getOutputChannel() {
     return lightOutput.toInteger() + 2;
@@ -804,6 +807,12 @@ private formatForSend(cmds) {
     }
     // logger("trace", "formatForSend:\n\t" + out.join("\n\t"))
     return out
+}
+
+private sendHubCommands(cmds) {
+    action = new hubitat.device.HubMultiAction()
+    cmds.each{ cmd -> action.add(cmd) }
+    sendHubCommand(action)
 }
 
 /**
@@ -928,8 +937,6 @@ private byteArrayToInt(byteArray) {
 private zwaveEndPointEvent(sourceEndPoint, value) {
     logger("trace", "zwaveEndPointEvent(): EndPoint ${sourceEndPoint} has value: ${value}")
 
-    cmds = []
-
     def percent = Math.round(value * 100 / 255)
     def currentLevel = device.currentValue("level")
     def currentSwitch = device.currentValue("switch")
@@ -958,8 +965,7 @@ private zwaveEndPointEvent(sourceEndPoint, value) {
             if (pressed && !state.dimUpPressed) {
                 logger("info", "Dim up start")
                 state.dimUpPressed = true
-                cmds << setLevel(currentLevel + 5)
-                // while dimUpPressed runInMillis setLevel + 5
+                runInMillis(2, 'dimUpLoop', [data: 5])
             } else if (!pressed && state.dimUpPressed) {
                 logger("info", "Dim up end")
                 state.dimUpPressed = false
@@ -970,19 +976,66 @@ private zwaveEndPointEvent(sourceEndPoint, value) {
             if (pressed && !state.dimDownPressed) {
                 logger("info", "Dim down start")
                 state.dimDownPressed = true
-                cmds << setLevel(currentLevel - 5)
-                // while dimUpPressed runInMillis setLevel - 5
+                runInMillis(2, 'dimDownLoop', [data: 5])
             } else if (!pressed && state.dimDownPressed) {
                 logger("info", "Dim down end")
                 state.dimDownPressed = false
             }
         } else if (getMotionInput() == sourceEndPoint) {
-            pressed = percent >= motionThreshold
-            logger("info", "Motion ${pressed}")
+            triggered = percent >= motionThreshold
+            currentMotion = device.currentValue("motion")
+            logger("info", "Motion ${triggered} - ${currentMotion}")
+            cmds = []
+            if (triggered && currentMotion != "active") {
+                logger("info", "motion active")
+                sendEvent(name: "motion", value: "active")
+                cmds << setLevel(100)
+            } else if (!triggered && currentMotion != "inactive") {
+                logger("info", "motion inactive")
+                sendEvent(name: "motion", value: "inactive")
+                // TODO schedule this via runIn and a "motion off delay"
+                cmds << setLevel(0)
+            }
+            sendHubCommands(cmds)
         }
     }
+}
 
-    return cmds
+private dimUpLoop(incr) {
+    level = device.currentValue("level")
+    dup = state.dimUpPressed
+    logger("info", "Dim up loop: ${dup} - ${level} by ${incr}")
+
+    // stop if dimUp isn't pressed or level is max
+    if (!dup || level >= 99) return
+
+    cmds = []
+    cmds << setLevel(level + incr)
+    
+    // TODO don't send a bunch of switchMultilevelGet while dimming
+    
+    // Get up button state to verify it is still pressed
+//    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: getDimUpInput())
+//        .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
+
+    sendHubCommands(formatForSend(cmds))
+
+    runInMillis(250, 'dimUpLoop', [data: 3])
+}
+
+private dimDownLoop(decr) {
+    level = device.currentValue("level")
+    ddp = state.dimDownPressed
+    logger("info", "Dim down loop: ${ddp} - ${level} by ${decr}")
+
+    // stop if dimDown isn't pressed or level is min
+    if (!ddp || level <= 0) return
+
+    cmds = []
+    cmds << setLevel(level - decr)
+    sendHubCommands(cmds)
+
+    runInMillis(250, 'dimDownLoop', [data: 3])
 }
 
 
