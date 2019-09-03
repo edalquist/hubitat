@@ -30,7 +30,7 @@ import groovy.transform.Field
         9:[1],
         // Time between each step in a transition between levels. Setting this to zero means an instantaneous change.
         // Must be ZERO for dim up/down buttons to work correctly
-        10:[0, 0],
+        10:intToUnsignedByteArray(0, 2),
         // Time for changing from start to end value: UNUSED DUE TO #8
         11:[0],
         // 38 & 39 are for alarm program, not used
@@ -141,6 +141,11 @@ metadata {
                     description: "[Default 50%]",
                     displayDuringSetup: false, required: true,
                     type: "number", defaultValue: 50, range: "1..99"
+
+            input name: "motionLightDuration", title: "Motion: How long to keep the light on after motion is detected.",
+                    description: "[Default 5 minutes]",
+                    displayDuringSetup: false, required: true,
+                    type: "number", defaultValue: 5
         }
 
         section { // PHYSICAL DEVICE PARAMETERS:
@@ -232,7 +237,7 @@ def parse(description) {
     def result = null
     if (description != "updated") {
         def cmd = zwave.parse(description, getSupportedCommands())
-        logger("info", "parse():\n\tcommand: ${cmd}\n\tfrom: ${description}")
+        logger("debug", "parse():\n\tcommand: ${cmd}\n\tfrom: ${description}")
         if (cmd) {
             result = zwaveEvent(cmd)
         } else {
@@ -271,7 +276,7 @@ def multiChannelCmdEncapEvent(hubitat.zwave.commands.multichannelv3.MultiChannel
     if (!encapsulatedCommand) {
         logger("warn", "zwaveEvent(): MultiChannelCmdEncap from endPoint ${cmd.sourceEndPoint} could not be translated: ${cmd}")
     } else {
-        logger("info", "multiChannelCmdEncapEvent(): endPoint: ${cmd.sourceEndPoint} message: ${encapsulatedCommand}")
+        logger("debug", "multiChannelCmdEncapEvent(): endPoint: ${cmd.sourceEndPoint} message: ${encapsulatedCommand}")
         return zwaveEvent(encapsulatedCommand, cmd.sourceEndPoint)
     }
 }
@@ -466,9 +471,6 @@ def basicReportEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
  *  These reports will arrive via a MultiChannelCmdEncap command, the zwaveEvent(...MultiChannelCmdEncap) handler
  *  will add the correct sourceEndPoint, before passing to this event handler.
  *
- *  Fibaro RGBW SwitchMultilevelReports have value in range [0..100], so this is scaled to 255 and passed to
- *  zwaveEndPointEvent().
- *
  *  Short       value       0x00 for off, other values are level (on).
  **/
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelReport cmd, sourceEndPoint = 0) {
@@ -489,7 +491,7 @@ def switchMultilevelReportEvent(hubitat.zwave.commands.switchmultilevelv2.Switch
     }
 }
 
-def outputChannelChangeEvent(newLevel) {
+private outputChannelChangeEvent(newLevel) {
     def currentLevel = (int) device.currentValue("level")
     logger("info", "outputChannelChangeEvent(): From ${currentLevel} to ${newLevel}");
 
@@ -508,49 +510,73 @@ def outputChannelChangeEvent(newLevel) {
     }
 }
 
-def dimUpInputChangeEvent(percent) {
-    logger("info", "dimUpInputChangeEvent(): Dim Up Change ${percent}");
-    // pressed = percent >= dimUpThreshold
-    // logger("trace", "Dim up ${pressed} - ${state.dimUpStart}")
-    // if (pressed && !state.dimUpPressed) {
-    //     logger("info", "Dim up start")
-    //     state.dimUpPressed = true
-    //     runInMillis(2, 'dimUpLoop', [data: 5])
-    // } else if (!pressed && state.dimUpPressed) {
-    //     logger("info", "Dim up end")
-    //     state.dimUpPressed = false
-    // }
+private dimUpInputChangeEvent(percent) {
+    if (state.upPressed == (state.upPressed = (percent <= dimUpThreshold))) {
+        // TODO a real lock would be REALLY handy here
+        logger("info", "dimUpInputChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (state.upPressed) {
+        logger("info", "dimUpInputChangeEvent(): Pressed");
+        level = device.currentValue("level");
+        return setLevel(level + 5);
+    } else {
+        logger("info", "dimUpInputChangeEvent(): Released");
+    }
+    // TODO someday handle press-and-hold?
 }
-def dimDownInputChangeEvent(percent) {
-    logger("info", "dimDownInputChangeEvent(): Dim Down Change ${percent}");
-    pressed = percent >= dimDownThreshold
-//     logger("trace", "Dim down ${pressed} - ${state.dimUpStart}")
-//     if (pressed && !state.dimDownPressed) {
-//         logger("info", "Dim down start")
-//         state.dimDownPressed = true
-//         runInMillis(2, 'dimDownLoop', [data: 5])
-//     } else if (!pressed && state.dimDownPressed) {
-//         logger("info", "Dim down end")
-//         state.dimDownPressed = false
-//     }
+
+private dimDownInputChangeEvent(percent) {
+    if (state.downPressed == (state.downPressed = (percent <= dimDownThreshold))) {
+        // TODO a real lock would be REALLY handy here
+        logger("info", "dimDownInputChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (state.downPressed) {
+        logger("info", "dimDownInputChangeEvent(): Pressed");
+        level = device.currentValue("level");
+        return setLevel(level - 5);
+    } else {
+        logger("info", "dimDownInputChangeEvent(): Released");
+    }
+    // TODO someday handle press-and-hold?
 }
-def motionChangeEvent(percent) {
-    logger("info", "motionChangeEvent(): Dim Motion Change ${percent}");
-//     triggered = percent >= motionThreshold
-//     currentMotion = device.currentValue("motion")
-//     logger("info", "Motion ${triggered} - ${currentMotion}")
-//     cmds = []
-//     if (triggered && currentMotion != "active") {
-//         logger("info", "motion active")
-//         sendEvent(name: "motion", value: "active")
-//         cmds << setLevel(100)
-//     } else if (!triggered && currentMotion != "inactive") {
-//         logger("info", "motion inactive")
-//         sendEvent(name: "motion", value: "inactive")
-//         // TODO schedule this via runIn and a "motion off delay"
-//         cmds << setLevel(0)
-//     }
-//     sendHubCommands(cmds)
+
+private motionChangeEvent(percent) {
+    if (state.motionTriggered == (state.motionTriggered = (percent >= motionThreshold))) {
+        // TODO a real lock would be REALLY handy here
+        logger("info", "motionChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (state.motionTriggered) {
+        logger("info", "motionChangeEvent(): Active");
+        sendEvent(name: "motion", value: "active")
+
+        // Cancel any pending task to turn off the light
+        unschedule(motionLightTimeout);
+
+        if (getChildDevice(state.motionLightToggleId).currentValue("switch") == "on") {
+            state.motionLightOn = true;
+            state.previousLevel = device.currentValue("level");
+            return setLevel(100);
+        }
+    } else {
+        logger("info", "motionChangeEvent(): Inactive");
+        sendEvent(name: "motion", value: "inactive");
+        if (state.motionLightOn) {
+            runIn(motionLightDuration, motionLightTimeout);
+        }
+    }
+}
+
+private motionLightTimeout() {
+    state.motionLightOn = false;
+    level = orDefault(state.previousLevel, 0);
+    logger("info", "motionLightTimeout(): Restoring light to ${level}%");
+    return setLevel(level);
 }
 
 
@@ -636,6 +662,12 @@ def reinstall() {
     keys.each { key -> device.removeSetting(key) }
     log.info "NEW SETTINGS: ${settings}"
 
+    def children = getChildDevices();
+    children.each { child ->
+        log.info "CHILDREN: deleting ${child}"
+        deleteChildDevice(child.deviceNetworkId);
+    }
+
     log.warn "RELOAD THE DRIVER PAGE AND CLICK SAVE"
 }
 
@@ -653,8 +685,6 @@ def configure() {
         cmds << zwave.configurationV1.configurationSet(parameterNumber: key, size: val.size(), configurationValue: val)
     }
 
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 9, size: 1, configurationValue: [configParam09])
-    cmds << zwave.configurationV1.configurationSet(parameterNumber: 10, size: 2, configurationValue: intToUnsignedByteArray(configParam10, 2))
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 12, size: 1, configurationValue: [configParam12])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 13, size: 1, configurationValue: [configParam13])
     cmds << zwave.configurationV1.configurationSet(parameterNumber: 14, size: 2, configurationValue: getParameter14())
@@ -686,14 +716,22 @@ def configure() {
 def installed() {
     logger("trace", "installed(${VERSION})")
 
-    /*
-    sendEvent(config_status: initializing)
-    send getParameter commands
-    zwave event handlers update settings
-     */
+    state.motionLightToggleId = device.getId() + ":motionLightToggle";
+    def d = getChildDevice(state.motionLightToggleId)
+    if (!d) {
+        def nd = addChildDevice("hubitat", "Virtual Switch", state.motionLightToggleId, [name: device.getName() + " - Motion Light"])
+        nd.sendEvent(name: "switch", value: "off", isStateChange: true, displayed: false)
+        logger("info", "installed() Added child switch ${state.motionLightToggleId}")
+    } else {
+        logger("info", "installed() Child switch ${state.motionLightToggleId} already exists")
+    }
 
     state.installedAt = now()
     state.lastReset = new Date().format("YYYY/MM/dd \n HH:mm:ss", location.timeZone)
+
+    state.downPressed = false;
+    state.upPressed = false;
+    state.motionTriggered = false;
 
 //    // Initialise attributes:
 //    sendEvent(name: "switch", value: "off", displayed: false)
@@ -770,6 +808,7 @@ def on() {
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: newLevel, dimmingDuration: 1))
 
     sendEvent(name: "switch", value: "on")
+    sendEvent(name: "level", value: newLevel, unit: "%")
 
     return formatForSend(delayBetween(cmds))
 }
@@ -789,6 +828,7 @@ def off() {
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 0, dimmingDuration: 1))
 
     sendEvent(name: "switch", value: "off")
+    sendEvent(name: "level", value: 0, unit: "%")
 
     return formatForSend(delayBetween(cmds))
 }
@@ -841,6 +881,7 @@ def refresh() {
 
     // INPUT channels are 2..5, ch1 is the average of 2..5
     (2..5).each {
+        // TODO these don't actually result in a state update?
         cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it).encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
     }
     // TODO do we ever need this report?
@@ -1036,43 +1077,12 @@ private byteArrayToInt(byteArray) {
     return i
 }
 
-private dimUpLoop(incr) {
-    level = device.currentValue("level")
-    dup = state.dimUpPressed
-    logger("info", "Dim up loop: ${dup} - ${level} by ${incr}")
-
-    // stop if dimUp isn't pressed or level is max
-    if (!dup || level >= 99) return
-
-    cmds = []
-    cmds << setLevel(level + incr)
-    
-    // TODO don't send a bunch of switchMultilevelGet while dimming
-    
-    // Get up button state to verify it is still pressed
-//    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: getDimUpInput())
-//        .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
-
-    sendHubCommands(formatForSend(cmds))
-
-    runInMillis(250, 'dimUpLoop', [data: 3])
+private orDefault(val, defVal) {
+    if (val != null) {
+        return val;
+    }
+    return defVal;
 }
-
-private dimDownLoop(decr) {
-    level = device.currentValue("level")
-    ddp = state.dimDownPressed
-    logger("info", "Dim down loop: ${ddp} - ${level} by ${decr}")
-
-    // stop if dimDown isn't pressed or level is min
-    if (!ddp || level <= 0) return
-
-    cmds = []
-    cmds << setLevel(level - decr)
-    sendHubCommands(cmds)
-
-    runInMillis(250, 'dimDownLoop', [data: 3])
-}
-
 
 /**********************************************************************
  *  Testing Commands:
