@@ -11,6 +11,8 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *  Changelog:
+ *    - 2019.09.15: Initial Version
  */
 import groovy.transform.Field
 
@@ -74,7 +76,7 @@ def initialize() {
     child = getChildDevice(childId);
     if (child == null) {
       child = addChildDevice("edalquist", "Presence Aware Notifier", childId, null,
-        [name: notificationDevice.getName() + " (Presence Aware)"]);
+        [name: notificationDevice.getName() + " (Presence Aware)", isComponent: true]);
     }
     child.setNotificationId(notificationDevice.getId());
     presenceKeys.remove(getPresenceDeviceSettingName(notificationDevice.getId()));
@@ -84,7 +86,7 @@ def initialize() {
   allChildDevices.each { child ->
     if (!expectedChildIds.contains(child.getDeviceNetworkId())) {
       log.info "Deleting old childApp: ${child}"
-      deleteChildApp(child.getDeviceNetworkId());
+      deleteChildDevice(child.getDeviceNetworkId());
     }
   }
 

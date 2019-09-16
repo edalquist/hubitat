@@ -11,6 +11,9 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *  Changelog:
+ *    - 2019.09.15: Initial Version
+ *
  */
 definition (name: "Presence Aware Notifier", namespace: "edalquist", author: "Eric Dalquist") {
   capability "Notification"
