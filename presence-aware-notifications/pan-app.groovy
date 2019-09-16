@@ -12,7 +12,8 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *  Changelog:
- *    - 2019.09.15: Initial Version
+ *    - 2019.09.15:   Initial Version
+ *    - 2019.09.15.a: Fix bug where all wrapped notification devices were notified
  */
 import groovy.transform.Field
 
@@ -132,11 +133,9 @@ private shouldNotify(notificationDeviceId) {
 }
 
 private getNotificationDevice(notificationDeviceId) {
-  notificationDevices.each{ notificationDevice ->
-    if (notificationDevice.getId() == notificationDeviceId) {
-      return notificationDevice;
-    }
-  }
+  notificationDevice = notificationDevices.find { it.getId() == notificationDeviceId }
+  log.info "Got: ${notificationDeviceId} == ${notificationDevice}"
+  return notificationDevice;
 }
 
 private getPresenceDeviceSettingName(notificationDeviceId) {
