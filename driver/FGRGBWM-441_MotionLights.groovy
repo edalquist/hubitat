@@ -586,7 +586,8 @@ private motionChangeEvent(percent) {
     state.motionLevel = percent
 
     def isActive = percent >= motionThreshold;
-    def wasActive = device.currentValue("motion") == "active"
+    def wasActive = state.motionActive
+    state.motionActive = isActive
     if (wasActive == isActive) {
         // TODO a real lock would be REALLY handy here
         logger("trace", "motionChangeEvent(): No state change, ignoring event");
