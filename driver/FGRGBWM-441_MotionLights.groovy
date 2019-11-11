@@ -70,16 +70,24 @@ metadata {
         attribute "motion", "enum", ["active", "inactive"]  // motion
 
         // Custom Attributes:
-        attribute "lastReset", "string" // Last Time that energy reporting period was reset.
+        attribute "lastReset", "string"         // Last Time that energy reporting period was reset.
+        attribute "level_motion", "number"      // Current level for the motion sensor input
+        attribute "level_switch_up", "number"   // Current level for the switch up input
+        attribute "level_switch_down", "number" // Current level for the switch down input
 
         // Custom Commands:
         command "getConfigReport"
-        command "reset"
+        command "resetEnergyMeter"
+        command "resetInputLevels"
         command "reinstall"
 
         fingerprint deviceId: "0x1101", inClusters: "0x33,0x85,0x86,0x31,0x32,0x70,0x60,0x26,0x86,0x72,0x27,0x20,0x7A"
     }
 
+    /*
+    TODO more prefs
+    - Disable motion control if lights are already on T|F
+    */
     preferences {
         section { // GENERAL:
             input name: "logLevel", title: "Select log level",
@@ -228,7 +236,7 @@ metadata {
  * @return commands to run in response to the device message
  */
 def parse(description) {
-    logger("trace", "parse(): raw message: ${description}")
+    logger("trace", "parse(): raw message:\n\t${description}")
     if (description == "updated") {
         logger("error", "THIS IS STILL NEEDED ON HUBITAT")
         return null
@@ -237,25 +245,23 @@ def parse(description) {
     def result = null
     if (description != "updated") {
         def cmd = zwave.parse(description, getSupportedCommands())
-        logger("debug", "parse():\n\tcommand: ${cmd}\n\tfrom: ${description}")
+        logger("trace", "parse():\n\tcommand: ${cmd}\n\tfrom: ${description}")
         if (cmd) {
             result = zwaveEvent(cmd)
         } else {
-            logger("error", "parse(): Could not parse raw message: ${description}")
+            logger("error", "parse(): Could not parse raw message:\n\t${description}")
         }
     }
 
-    logger("trace", "parse(): result: ${result}")
+    logger("trace", "parse(): result:\n\t${result}")
 
     // Convert commands into a HubMultiAction, not sure why it has to work this way vs just returning cmds
-    /*
     if (result != null) {
+        logger("trace", "Converting to HubMultiAction\n\t${result}")
         action = new hubitat.device.HubMultiAction()
         result.each{cmd -> action.add(cmd)}
         return action
     }
-    */
-    return result
 }
 
 
@@ -270,13 +276,13 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
     return multiChannelCmdEncapEvent(cmd);
 }
 def multiChannelCmdEncapEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-    logger("trace", "zwaveEvent(): MultiChannelCmdEncap received: ${cmd}")
+    logger("trace", "multiChannelCmdEncapEvent():\n\t${cmd}")
 
     def encapsulatedCommand = cmd.encapsulatedCommand(getSupportedCommands())
     if (!encapsulatedCommand) {
-        logger("warn", "zwaveEvent(): MultiChannelCmdEncap from endPoint ${cmd.sourceEndPoint} could not be translated: ${cmd}")
+        logger("warn", "multiChannelCmdEncapEvent(): MultiChannelCmdEncap from endPoint ${cmd.sourceEndPoint} could not be translated:\n\t${cmd}")
     } else {
-        logger("debug", "multiChannelCmdEncapEvent(): endPoint: ${cmd.sourceEndPoint} message: ${encapsulatedCommand}")
+        logger("debug", "multiChannelCmdEncapEvent():\n\tendPoint: ${cmd.sourceEndPoint}\n\tmessage: ${encapsulatedCommand}")
         return zwaveEvent(encapsulatedCommand, cmd.sourceEndPoint)
     }
 }
@@ -295,7 +301,7 @@ def zwaveEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
     return configurationReportEvent(cmd);
 }
 def configurationReportEvent(hubitat.zwave.commands.configurationv1.ConfigurationReport cmd) {
-    logger("debug", "zwaveEvent(): ConfigurationReport received: ${cmd}")
+    logger("debug", "configurationReportEvent():\n\t${cmd}")
     int paramNum = (int) cmd.parameterNumber
     def settingName = String.format("configParam%02d", cmd.parameterNumber)
 
@@ -311,13 +317,8 @@ def configurationReportEvent(hubitat.zwave.commands.configurationv1.Configuratio
         }
     }
 
-    // TODO is this true for hubitat too?
-    // Translate cmd.configurationValue to an int. This should be returned from zwave.parse() as
-    // cmd.scaledConfigurationValue, but it hasn't been implemented by SmartThings yet! :/
-    //  See: https://community.smartthings.com/t/zwave-configurationv2-configurationreport-dev-question/9771
-    // def scaledConfigurationValue = byteArrayToInt(cmd.configurationValue)
-
     if (expectedValue != cmd.configurationValue) {
+        // TODO this should set a flag/variable/etc warning about this miss-match
         logger("warn", "Parameter #${cmd.parameterNumber} has value: ${cmd.configurationValue} but should have value: ${expectedValue}")
         logger("warn", "Reload the Device page and click Save Preferences")
     } else {
@@ -338,7 +339,7 @@ def zwaveEvent(hubitat.zwave.commands.associationv2.AssociationReport cmd) {
     return associationReportEvent(cmd);
 }
 def associationReportEvent(hubitat.zwave.commands.associationv2.AssociationReport cmd) {
-    logger("debug", "zwaveEvent(): AssociationReport received: ${cmd}")
+    logger("debug", "associationReportEvent():\n\t${cmd}")
     logger("info", "Association Group ${cmd.groupingIdentifier} contains nodes: ${cmd.nodeId}")
 }
 
@@ -351,7 +352,7 @@ def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv1.ManufacturerSpecifi
     return manufacturerSpecificReportEvent(cmd);
 }
 def manufacturerSpecificReportEvent(hubitat.zwave.commands.manufacturerspecificv1.ManufacturerSpecificReport cmd) {
-    logger("debug", "zwaveEvent(): ManufacturerSpecificReport received: ${cmd}")
+    logger("debug", "manufacturerSpecificReportEvent():\n\t${cmd}")
     updateDataValue("manufacturerName", "${cmd.manufacturerName}")
     updateDataValue("manufacturerId", "${cmd.manufacturerId}")
     updateDataValue("productId", "${cmd.productId}")
@@ -367,7 +368,7 @@ def zwaveEvent(hubitat.zwave.commands.versionv1.VersionReport cmd) {
     return versionReportEvent(cmd);
 }
 def versionReportEvent(hubitat.zwave.commands.versionv1.VersionReport cmd) {
-    logger("debug", "zwaveEvent(): VersionReport received: ${cmd}")
+    logger("debug", "versionReportEvent():\n\t${cmd}")
     updateDataValue("applicationVersion", "${cmd.applicationVersion}")
     updateDataValue("applicationSubVersion", "${cmd.applicationSubVersion}")
     updateDataValue("zWaveLibraryType", "${cmd.zWaveLibraryType}")
@@ -385,7 +386,7 @@ def zwaveEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
     return firmwareMdReportEvent(cmd);
 }
 def firmwareMdReportEvent(hubitat.zwave.commands.firmwareupdatemdv2.FirmwareMdReport cmd) {
-    logger("debug", "zwaveEvent(): FirmwareMdReport received: ${cmd}")
+    logger("debug", "firmwareMdReportEvent():\n\t${cmd}")
     if (cmd.checksum != null) updateDataValue("firmwareChecksum", "${cmd.checksum}")
     if (cmd.firmwareId != null) updateDataValue("firmwareId", "${cmd.firmwareId}")
     if (cmd.manufacturerId != null) updateDataValue("manufacturerId", "${cmd.manufacturerId}")
@@ -400,7 +401,7 @@ def zwaveEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
     return switchAllReportEvent(cmd);
 }
 def switchAllReportEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
-    logger("info", "zwaveEvent(): SwitchAllReport received: ${cmd}")
+    logger("info", "switchAllReportEvent():\n\t${cmd}")
 }
 
 /**
@@ -425,14 +426,15 @@ def zwaveEvent(hubitat.zwave.commands.meterv2.MeterReport cmd) {
     return meterReportEvent(cmd);
 }
 def meterReportEvent(hubitat.zwave.commands.meterv2.MeterReport cmd) {
-    logger("trace", "zwaveEvent(): MeterReport received: ${cmd}")
+    logger("debug", "meterReportEvent():\n\t${cmd}")
 
     if (cmd.scale == 0) { // Accumulated Energy (kWh):
         state.energy = cmd.scaledMeterValue
         logger("info", "Accumulated energy is ${cmd.scaledMeterValue} kWh")
         sendEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
     } else if (cmd.scale == 1) { // Accumulated Energy (kVAh): Ignore.
-        logger("info", "Accumulated Energy ${cmd.scaledMeterValue} kVAh")
+        logger("warn", "Accumulated Energy ${cmd.scaledMeterValue} kVAh")
+        // TODO why do we ignore KVAh?
         // createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kVAh")
     } else if (cmd.scale == 2) { // Instantaneous Power (Watts):
         logger("info", "Power is ${cmd.scaledMeterValue} W")
@@ -459,7 +461,7 @@ def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
     return basicReportEvent(cmd);
 }
 def basicReportEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
-    logger("info", "zwaveEvent(): BasicReport received: ${cmd} (ignored)")
+    logger("info", "basicReportEvent():\n\t${cmd}")
     // BasicReports are ignored as the aggregate switch and level attributes are calculated seperately.
 }
 
@@ -477,7 +479,7 @@ def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelReport 
     return switchMultilevelReportEvent(cmd, sourceEndPoint);
 }
 def switchMultilevelReportEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelReport cmd, sourceEndPoint = 0) {
-    logger("trace", "switchMultilevelReportEvent(): SwitchMultilevelReport received from endPoint ${sourceEndPoint}: ${cmd}")
+    logger("debug", "switchMultilevelReportEvent():\n\t${cmd}")
 
     switch (sourceEndPoint) {
         case getOutputChannel():
@@ -488,11 +490,17 @@ def switchMultilevelReportEvent(hubitat.zwave.commands.switchmultilevelv2.Switch
             return dimDownInputChangeEvent(cmd.value);
         case getMotionInput():
             return motionChangeEvent(cmd.value);
+        default:
+            logger("info", "switchMultilevelReportEvent():Unknown sourceEndPoint ${sourceEndPoint}\n\t${cmd}")
     }
 }
 
 private outputChannelChangeEvent(newLevel) {
     def currentLevel = (int) device.currentValue("level")
+    if (newLevel == currentLevel) {
+        logger("trace", "outputChannelChangeEvent(): No Change: ${newLevel}");
+        return
+    }
     logger("info", "outputChannelChangeEvent(): From ${currentLevel} to ${newLevel}");
 
     def currentSwitch = device.currentValue("switch")
@@ -511,72 +519,121 @@ private outputChannelChangeEvent(newLevel) {
 }
 
 private dimUpInputChangeEvent(percent) {
-    if (state.upPressed == (state.upPressed = (percent <= dimUpThreshold))) {
-        // TODO a real lock would be REALLY handy here
-        logger("info", "dimUpInputChangeEvent(): No state change, ignoring event");
+    def currentPercent = (int) device.currentValue("level_switch_up")
+    if (currentPercent == percent) {
+        logger("trace", "dimUpInputChangeEvent(): No level change, ignoring event");
         return;
     }
 
-    if (state.upPressed) {
-        logger("info", "dimUpInputChangeEvent(): Pressed");
+    sendEvent(name: "level_switch_up", value: percent, unit: "%")
+
+    def isPressed = percent <= dimUpThreshold;
+    def wasPressed = state.upPressed;
+    state.upPressed = isPressed;
+    if (wasPressed == isPressed) {
+        // TODO a real lock would be REALLY handy here
+        logger("trace", "dimUpInputChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (isPressed) {
+        logger("trace", "dimUpInputChangeEvent(): Pressed");
         level = device.currentValue("level");
-        return setLevel(level + 5);
+        return setLevel(level + 10);
     } else {
         logger("info", "dimUpInputChangeEvent(): Released");
     }
-    // TODO someday handle press-and-hold?
+    // TODO someday handle press-and-hold? This is hard because response time from input change to
+    // hub reaction can be REALLY (like a few seconds) slow
 }
 
 private dimDownInputChangeEvent(percent) {
-    if (state.downPressed == (state.downPressed = (percent <= dimDownThreshold))) {
-        // TODO a real lock would be REALLY handy here
-        logger("info", "dimDownInputChangeEvent(): No state change, ignoring event");
+    def currentPercent = (int) device.currentValue("level_switch_down")
+    if (currentPercent == percent) {
+        logger("trace", "dimDownInputChangeEvent(): No level change, ignoring event");
         return;
     }
 
-    if (state.downPressed) {
+    sendEvent(name: "level_switch_down", value: percent, unit: "%")
+
+    def isPressed = percent <= dimDownThreshold;
+    def wasPressed = state.downPressed;
+    state.downPressed = isPressed
+    if (wasPressed == isPressed) {
+        // TODO a real lock would be REALLY handy here
+        logger("trace", "dimDownInputChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (isPressed) {
         logger("info", "dimDownInputChangeEvent(): Pressed");
         level = device.currentValue("level");
-        return setLevel(level - 5);
+        return setLevel(level - 10);
     } else {
         logger("info", "dimDownInputChangeEvent(): Released");
     }
-    // TODO someday handle press-and-hold?
+    // TODO someday handle press-and-hold? This is hard because response time from input change to
+    // hub reaction can be REALLY (like a few seconds) slow
 }
 
 private motionChangeEvent(percent) {
-    if (state.motionTriggered == (state.motionTriggered = (percent >= motionThreshold))) {
-        // TODO a real lock would be REALLY handy here
-        logger("info", "motionChangeEvent(): No state change, ignoring event");
+    def currentPercent = (int) device.currentValue("level_motion")
+    if (currentPercent == percent) {
+        logger("trace", "motionChangeEvent(): No level change, ignoring event");
         return;
     }
 
-    if (state.motionTriggered) {
+    sendEvent(name: "level_motion", value: percent, unit: "%")
+
+    def isActive = percent >= motionThreshold;
+    def wasActive = device.currentValue("motion") == "active"
+    if (wasActive == isActive) {
+        // TODO a real lock would be REALLY handy here
+        logger("trace", "motionChangeEvent(): No state change, ignoring event");
+        return;
+    }
+
+    if (isActive) {
         logger("info", "motionChangeEvent(): Active");
+
+        // Set motion capability to active
         sendEvent(name: "motion", value: "active")
 
         // Cancel any pending task to turn off the light
         unschedule(motionLightTimeout);
 
-        if (getChildDevice(state.motionLightToggleId).currentValue("switch") == "on") {
-            state.motionLightOn = true;
-            state.previousLevel = device.currentValue("level");
+        // If the motionLighting switch is on AND the lights are currently off turn on the light
+        if (getChildDevice(state.motionLightToggleId).currentValue("switch") == "on" && device.currentValue("level") == 0) {
+            state.turnedOnByMotion = true;
+            // state.previousLevel = device.currentValue("level");
             return setLevel(100);
         }
     } else {
         logger("info", "motionChangeEvent(): Inactive");
+
+        // Set motion capability to inactive
         sendEvent(name: "motion", value: "inactive");
-        if (state.motionLightOn) {
-            runIn(motionLightDuration, motionLightTimeout);
+
+        // If motion was the thing that turned on the lights schedule to turn them off
+        if (state.turnedOnByMotion) {
+            runIn(motionLightDuration * 60, 'motionLightTimeout');
         }
     }
 }
 
 private motionLightTimeout() {
-    state.motionLightOn = false;
-    level = orDefault(state.previousLevel, 0);
-    logger("info", "motionLightTimeout(): Restoring light to ${level}%");
-    return setLevel(level);
+    // Only turn off the light if it is still in the "turned on by motion" state
+    if (state.turnedOnByMotion) {
+        state.turnedOnByMotion = false;
+        // level = orDefault(state.previousLevel, 0);
+        logger("info", "motionLightTimeout(): Turning off lights");
+        return setLevel(0);
+    }
+}
+
+private cancelMotionLightTimeout() {
+    unschedule(motionLightTimeout);
+    state.turnedOnByMotion = false;
 }
 
 
@@ -584,14 +641,14 @@ def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStartLe
     return switchMultilevelStartLevelChangeEvent(cmd);
 }
 def switchMultilevelStartLevelChangeEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStartLevelChange cmd) {
-    logger("info", "zwaveEvent(): SwitchMultilevelStartLevelChange received: ${cmd} (ignored)")
+    logger("info", "switchMultilevelStartLevelChangeEvent():\n\t${cmd}")
 }
 
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStopLevelChange cmd) {
     return switchMultilevelStopLevelChangeEvent(cmd);
 }
 def switchMultilevelStopLevelChangeEvent(hubitat.zwave.commands.switchmultilevelv2.SwitchMultilevelStopLevelChange cmd) {
-    logger("info", "zwaveEvent(): SwitchMultilevelStopLevelChange received: ${cmd} (ignored)")
+    logger("info", "switchMultilevelStopLevelChangeEvent():\n\t${cmd}")
 }
 
 /**
@@ -603,13 +660,13 @@ def zwaveEvent(hubitat.zwave.commands.sensormultilevelv2.SensorMultilevelReport 
     return sensorMultilevelReportEvent(cmd);
 }
 def sensorMultilevelReportEvent(hubitat.zwave.commands.sensormultilevelv2.SensorMultilevelReport cmd) {
-    logger("trace", "zwaveEvent(): SensorMultilevelReport received: ${cmd}")
+    logger("debug", "sensorMultilevelReportEvent():\n\t${cmd}")
 
     if (cmd.sensorType == 4 /*SENSOR_TYPE_POWER_VERSION_2*/) { // Instantaneous Power (Watts):
         logger("info", "Power is ${cmd.scaledSensorValue} W")
-        return createEvent(name: "power", value: cmd.scaledSensorValue, unit: "W")
+        sendEvent(name: "power", value: cmd.scaledSensorValue, unit: "W")
     } else {
-        logger("warn", "zwaveEvent(): SensorMultilevelReport with unhandled sensorType: ${cmd}")
+        logger("warn", "sensorMultilevelReportEvent(): SensorMultilevelReport with unhandled sensorType:\n\t${cmd}")
     }
 }
 
@@ -627,7 +684,7 @@ def zwaveEvent(hubitat.zwave.commands.switchcolorv2.SwitchColorReport cmd) {
     return switchColorReportEvent(cmd);
 }
 def switchColorReportEvent(hubitat.zwave.commands.switchcolorv2.SwitchColorReport cmd) {
-    logger("info", "zwaveEvent(): SwitchColorReport received: ${cmd} (ignoring)")
+    logger("info", "switchColorReportEvent():\n\t${cmd}")
     // TODO ignoring these for now
 
     //if (cmd.colorComponentId == 0) { cmd.colorComponentId = 5 } // Remap warmWhite colorComponentId
@@ -643,7 +700,7 @@ def zwaveEvent(hubitat.zwave.Command cmd) {
     return commandEvent(cmd);
 }
 def commandEvent(hubitat.zwave.Command cmd) {
-    logger("error", "zwaveEvent(): No handler for command: ${cmd}")
+    logger("error", "zwaveEvent(): No handler for command:\n\t${cmd}")
 }
 
 /**********************************************************************
@@ -719,8 +776,8 @@ def installed() {
     state.motionLightToggleId = device.getId() + ":motionLightToggle";
     def d = getChildDevice(state.motionLightToggleId)
     if (!d) {
-        def nd = addChildDevice("hubitat", "Virtual Switch", state.motionLightToggleId, [name: device.getName() + " - Motion Light"])
-        nd.sendEvent(name: "switch", value: "off", isStateChange: true, displayed: false)
+        def nd = addChildDevice("hubitat", "Virtual Switch", state.motionLightToggleId, [name: device.getName() + " - Motion Sensor"])
+        nd.sendEvent(name: "switch", value: "on", isStateChange: true, displayed: false)
         logger("info", "installed() Added child switch ${state.motionLightToggleId}")
     } else {
         logger("info", "installed() Child switch ${state.motionLightToggleId} already exists")
@@ -731,9 +788,9 @@ def installed() {
 
     state.downPressed = false;
     state.upPressed = false;
-    state.motionTriggered = false;
+    state.turnedOnByMotion = false;
 
-//    // Initialise attributes:
+//    // TODO Initialize attributes or do a refresh to get them from the device?
 //    sendEvent(name: "switch", value: "off", displayed: false)
 //    sendEvent(name: "level", value: 0, unit: "%", displayed: false)
 //    sendEvent(name: "hue", value: 0, unit: "%", displayed: false)
@@ -822,6 +879,7 @@ def off() {
 
     def cmds = []
 
+    cancelMotionLightTimeout()
     state.previousLevel = device.currentValue("level")
     logger("info", "off(): previousLevel: ${state.previousLevel}")
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel )
@@ -843,16 +901,25 @@ def off() {
  **/
 def setLevel(level, rate = 1) {
     def channel = getOutputChannel()
-    level = Math.max(0, Math.min(100, (int) level))
+    level = Math.max(0, Math.min(99, (int) level))
     logger("info", "setLevel(): Setting channel ${channel} switch to ${level}.")
     if (rate != 1) {
         logger("warn", "setLevel(): fade rate is not supported.")
+    }
+
+    if (level < 99) {
+        cancelMotionLightTimeout()
     }
 
     def cmds = []
     cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: channel)
         .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: level, dimmingDuration: 1))
 
+    if (level == 0 && device.currentValue("switch") != "off") {
+        sendEvent(name: "switch", value: "off")
+    } else if (level > 0 && device.currentValue("switch") != "on") {
+        sendEvent(name: "switch", value: "on")
+    }
     sendEvent(name: "level", value: level, unit: "%")
 
     return formatForSend(delayBetween(cmds))
@@ -882,17 +949,18 @@ def refresh() {
     // INPUT channels are 2..5, ch1 is the average of 2..5
     (2..5).each {
         // TODO these don't actually result in a state update?
-        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it).encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
+        cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: it)
+            .encapsulate(zwave.switchMultilevelV2.switchMultilevelGet())
     }
     // TODO do we ever need this report?
     // else { // There are no INPUT channels, so we can use switchColorGet for greater accuracy:
-    //  (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it) }
+     (0..4).each { cmds << zwave.switchColorV3.switchColorGet(colorComponentId: it) }
     // }
 
     cmds << zwave.meterV3.meterGet(scale: 0) // Get energy MeterReport
     cmds << zwave.meterV3.meterGet(scale: 2) // Get power MeterReport
 
-    return formatForSend(delayBetween(cmds, 200))
+    return formatForSend(delayBetween(cmds))
 }
 
 /**********************************************************************
@@ -902,16 +970,32 @@ def refresh() {
 /**
  *  reset() - Reset Accumulated Energy.
  **/
-def reset() {
-    logger("trace", "reset()")
+def resetEnergyMeter() {
+    logger("trace", "resetEnergyMeter()")
 
     state.lastReset = new Date().format("YYYY/MM/dd \n HH:mm:ss", location.timeZone)
     sendEvent(name: "lastReset", value: state.lastReset)
 
     return [
-            zwave.meterV3.meterReset(),
-            zwave.meterV3.meterGet(scale: 0)
+        zwave.meterV3.meterReset(),
+        zwave.meterV3.meterGet(scale: 0)
     ]
+}
+
+def resetInputLevels() {
+    logger("trace", "resetInputLevels()")
+
+    def cmds = []
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: getDimDownInput())
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 1, dimmingDuration: 1))
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: getDimUpInput())
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 1, dimmingDuration: 1))
+    cmds << zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: getMotionInput())
+        .encapsulate(zwave.switchMultilevelV2.switchMultilevelSet(value: 1, dimmingDuration: 1))
+
+    // sendEvent(name: "level", value: level, unit: "%")
+
+    return formatForSend(delayBetween(cmds))
 }
 
 /**********************************************************************
@@ -959,9 +1043,11 @@ private formatForSend(cmds) {
             return it.format()
         } catch (org.codehaus.groovy.runtime.metaclass.MethodSelectionException e) {
             if (!e.toString().contains("java.lang.String#")) {
-                logger("warn", "format failed: ${e}")
+                logger("warn", "format ${it} failed: ${e}")
             }
             return it
+        } catch (Throwable e) {
+            logger("warn", "format ${it} failed: ${e}")
         }
     }
     // logger("trace", "formatForSend:\n\t" + out.join("\n\t"))
