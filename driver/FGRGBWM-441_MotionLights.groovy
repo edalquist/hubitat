@@ -10,6 +10,9 @@
  *   for the specific language governing permissions and limitations under the License.
  *
  *   https://manuals.fibaro.com/content/manuals/us/FGRGBWM-441/FGRGBWM-441-USA-A-v1.01.pdf
+ *
+ * Custom driver for FGRGBWM-441 where one output is used to control the lights and the
+ * other three channels are used for dim up / dim down / motion sensor inputs.
  **/
 import groovy.transform.Field
 
@@ -71,9 +74,6 @@ metadata {
 
         // Custom Attributes:
         attribute "lastReset", "string"         // Last Time that energy reporting period was reset.
-        attribute "level_motion", "number"      // Current level for the motion sensor input
-        attribute "level_switch_up", "number"   // Current level for the switch up input
-        attribute "level_switch_down", "number" // Current level for the switch down input
 
         // Custom Commands:
         command "getConfigReport"
@@ -519,13 +519,13 @@ private outputChannelChangeEvent(newLevel) {
 }
 
 private dimUpInputChangeEvent(percent) {
-    def currentPercent = (int) device.currentValue("level_switch_up")
-    if (currentPercent == percent) {
+    def prevPercent = state.upInputLevel
+    if (prevPercent == percent) {
         logger("trace", "dimUpInputChangeEvent(): No level change, ignoring event");
         return;
     }
+    state.upInputLevel = percent
 
-    sendEvent(name: "level_switch_up", value: percent, unit: "%")
 
     def isPressed = percent <= dimUpThreshold;
     def wasPressed = state.upPressed;
@@ -548,13 +548,13 @@ private dimUpInputChangeEvent(percent) {
 }
 
 private dimDownInputChangeEvent(percent) {
-    def currentPercent = (int) device.currentValue("level_switch_down")
-    if (currentPercent == percent) {
+    def prevPercent = state.downInputLevel
+    if (prevPercent == percent) {
         logger("trace", "dimDownInputChangeEvent(): No level change, ignoring event");
         return;
     }
 
-    sendEvent(name: "level_switch_down", value: percent, unit: "%")
+    state.downInputLevel = percent
 
     def isPressed = percent <= dimDownThreshold;
     def wasPressed = state.downPressed;
@@ -577,13 +577,13 @@ private dimDownInputChangeEvent(percent) {
 }
 
 private motionChangeEvent(percent) {
-    def currentPercent = (int) device.currentValue("level_motion")
-    if (currentPercent == percent) {
+    def prevPercent = state.motionLevel
+    if (prevPercent == percent) {
         logger("trace", "motionChangeEvent(): No level change, ignoring event");
         return;
     }
 
-    sendEvent(name: "level_motion", value: percent, unit: "%")
+    state.motionLevel = percent
 
     def isActive = percent >= motionThreshold;
     def wasActive = device.currentValue("motion") == "active"
